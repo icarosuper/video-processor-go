@@ -1,0 +1,31 @@
+# Binários do Go
+/video-processor
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+
+# Diretórios de build
+/build/
+/bin/
+
+# Arquivos temporários
+*.out
+*.log
+*.tmp
+/tmp/
+
+# Arquivos de configuração sensíveis
+.env
+
+# Diretórios do Go Modules
+/vendor/
+
+# IDEs e editores
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store 

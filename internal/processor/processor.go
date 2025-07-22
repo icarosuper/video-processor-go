@@ -2,6 +2,7 @@ package processor
 
 import (
 	"fmt"
+	processor_steps "video-processor/internal/processor/processor-steps"
 )
 
 // ProcessVideo executa todas as etapas do pipeline de processamento de vídeo.

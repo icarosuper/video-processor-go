@@ -86,9 +86,9 @@ func processNextMessage(workerID int) {
 	videoID := msg.VideoID
 	fmt.Printf("[Worker %d] Mensagem recebida. VideoID: %s\n", workerID, videoID)
 
-	// Baixar vídeo do MinIO
+	// Baixar vídeo do MinIO (raw)
 	inputPath := "/tmp/" + videoID + "_input.mp4"
-	if err := minio.DownloadVideo(videoID, inputPath); err != nil {
+	if err := minio.DownloadVideo(minio.VideoTypeRaw, videoID, inputPath); err != nil {
 		fmt.Printf("[Worker %d] Erro ao baixar vídeo do MinIO: %v\n", workerID, err)
 		return
 	}
@@ -100,9 +100,9 @@ func processNextMessage(workerID int) {
 		return
 	}
 
-	// Fazer upload do vídeo processado para o MinIO
+	// Fazer upload do vídeo processado para o MinIO (processed)
 	processedID := videoID + "_processed"
-	if err := minio.UploadVideo(outputPath, processedID); err != nil {
+	if err := minio.UploadVideo(outputPath, minio.VideoTypeProcessed, processedID); err != nil {
 		fmt.Printf("[Worker %d] Erro ao fazer upload do vídeo processado: %v\n", workerID, err)
 		return
 	}

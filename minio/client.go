@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 	"video-processor/config"
 
 	"github.com/minio/minio-go/v7"
@@ -60,30 +59,42 @@ func InitMinioClient(config *config.Config) {
 }
 
 func getObjectPath(videoType VideoType, objectID string) string {
-	return filepath.Join(string(videoType), objectID)
+	return string(videoType) + "/" + objectID
 }
 
 func DownloadVideo(videoType VideoType, objectID, destPath string) error {
 	ctx := context.Background()
-
 	objectPath := getObjectPath(videoType, objectID)
+
+	// Verifica se o objeto existe antes de tentar baixar
+	_, err := client.StatObject(ctx, cfg.MinioBucketName, objectPath, minio.StatObjectOptions{})
+	if err != nil {
+		log.Printf("[minio] objeto %s não encontrado: %v", objectPath, err)
+		return err
+	}
 
 	object, err := client.GetObject(ctx, cfg.MinioBucketName, objectPath, minio.GetObjectOptions{})
 	if err != nil {
-		return fmt.Errorf("[minio] erro ao obter objeto: %w", err)
+		log.Printf("[minio] erro ao obter objeto %s: %v", objectPath, err)
+		return err
 	}
 	defer object.Close()
+	fmt.Printf("[minio] Download de %s iniciado...\n", objectPath)
 
 	outFile, err := os.Create(destPath)
 	if err != nil {
-		return fmt.Errorf("[minio] erro ao criar arquivo destino: %w", err)
+		log.Printf("[minio] erro ao criar arquivo destino %s: %v", destPath, err)
+		return err
 	}
 	defer outFile.Close()
+	fmt.Printf("[minio] Salvando arquivo em %s...\n", destPath)
 
 	if _, err := outFile.ReadFrom(object); err != nil {
-		return fmt.Errorf("[minio] erro ao salvar arquivo: %w", err)
+		log.Printf("[minio] erro ao ler objeto %s: %v", objectPath, err)
+		return err
 	}
 	fmt.Printf("[minio] Download de %s para %s concluído!\n", objectPath, destPath)
+
 	return nil
 }
 

@@ -3,6 +3,7 @@ module video-processor
 go 1.24.5
 
 require (
+	github.com/caarlos0/env/v10 v10.0.0
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/joho/godotenv v1.5.1
 	github.com/minio/minio-go/v7 v7.0.95

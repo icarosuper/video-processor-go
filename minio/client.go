@@ -3,14 +3,15 @@ package minio
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
+	"video-processor/config"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
-// VideoType representa o tipo de vídeo (raw, processed, etc.)
 type VideoType string
 
 const (
@@ -19,53 +20,55 @@ const (
 )
 
 var (
-	client     *minio.Client
-	bucketName = getBucketName()
+	client *minio.Client
+	cfg    *config.Config
 )
 
-func getBucketName() string {
-	name := os.Getenv("MINIO_BUCKET_NAME")
-	if name == "" {
-		return "videos"
+const (
+	useSsl = false // TODO: Ver se precisa usar SSL
+	token  = ""    // TODO: Ver se precisa adicionar esse token
+)
+
+func InitMinioClient(config *config.Config) {
+	cfg = config
+
+	var err error
+	client, err = minio.New(cfg.MinioEndpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(cfg.MinioRootUser, cfg.MinioRootPassword, token),
+		Secure: useSsl,
+	})
+
+	if err != nil {
+		log.Fatalf("error initializing minio client: %v", err)
 	}
-	return name
+
+	exists, err := client.BucketExists(context.Background(), cfg.MinioBucketName)
+	if err != nil {
+		log.Fatalf("erro ao verificar se o bucket existe: %v", err)
+	} else {
+		log.Printf("Bucket %s existe: %t\n", cfg.MinioBucketName, exists)
+	}
+
+	if !exists {
+		err = client.MakeBucket(context.Background(), cfg.MinioBucketName, minio.MakeBucketOptions{})
+		if err != nil {
+			log.Fatalf("erro ao criar bucket: %v", err)
+		} else {
+			fmt.Printf("Bucket %s criado com sucesso!\n", cfg.MinioBucketName)
+		}
+	}
 }
 
 func getObjectPath(videoType VideoType, objectID string) string {
-	// videoType: "raw", "processed", etc.
 	return filepath.Join(string(videoType), objectID)
 }
 
-func getMinioClient() (*minio.Client, error) {
-	if client != nil {
-		return client, nil
-	}
-	endpoint := os.Getenv("MINIO_ENDPOINT")
-	accessKeyID := os.Getenv("MINIO_ROOT_USER")
-	secretAccessKey := os.Getenv("MINIO_ROOT_PASSWORD")
-	useSSL := false
-
-	c, err := minio.New(endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
-		Secure: useSSL,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("[minio] erro ao criar client: %w", err)
-	}
-	client = c
-	fmt.Printf("[minio] Conectado ao MinIO em %s\n", endpoint)
-	return client, nil
-}
-
-// DownloadVideo baixa um vídeo do MinIO dado um tipo (VideoType) e um ID.
 func DownloadVideo(videoType VideoType, objectID, destPath string) error {
-	cli, err := getMinioClient()
-	if err != nil {
-		return err
-	}
 	ctx := context.Background()
+
 	objectPath := getObjectPath(videoType, objectID)
-	object, err := cli.GetObject(ctx, bucketName, objectPath, minio.GetObjectOptions{})
+
+	object, err := client.GetObject(ctx, cfg.MinioBucketName, objectPath, minio.GetObjectOptions{})
 	if err != nil {
 		return fmt.Errorf("[minio] erro ao obter objeto: %w", err)
 	}
@@ -84,12 +87,7 @@ func DownloadVideo(videoType VideoType, objectID, destPath string) error {
 	return nil
 }
 
-// UploadVideo faz upload de um vídeo processado para o MinIO em uma "pasta" (prefixo).
 func UploadVideo(srcPath string, videoType VideoType, objectID string) error {
-	cli, err := getMinioClient()
-	if err != nil {
-		return err
-	}
 	ctx := context.Background()
 	file, err := os.Open(srcPath)
 	if err != nil {
@@ -103,10 +101,10 @@ func UploadVideo(srcPath string, videoType VideoType, objectID string) error {
 	}
 
 	objectPath := getObjectPath(videoType, objectID)
-	_, err = cli.PutObject(ctx, bucketName, objectPath, file, fileInfo.Size(), minio.PutObjectOptions{ContentType: "video/mp4"})
+	_, err = client.PutObject(ctx, cfg.MinioBucketName, objectPath, file, fileInfo.Size(), minio.PutObjectOptions{ContentType: "video/mp4"})
 	if err != nil {
 		return fmt.Errorf("[minio] erro ao fazer upload: %w", err)
 	}
-	fmt.Printf("[minio] Upload de %s para bucket %s concluído!\n", objectPath, bucketName)
+	fmt.Printf("[minio] Upload de %s para bucket %s concluído!\n", objectPath, cfg.MinioBucketName)
 	return nil
 }

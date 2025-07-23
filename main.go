@@ -18,8 +18,9 @@ import (
 )
 
 func main() {
-	// Carregar variáveis do .env, se existir
 	cfg := config.LoadConfig()
+
+	initClients(cfg)
 
 	numWorkers := cfg.WorkerCount
 	if numWorkers == 0 {
@@ -82,7 +83,11 @@ func main() {
 	fmt.Println("Programa encerrado.")
 }
 
-// processNextMessage consome e processa uma mensagem da fila
+func initClients(cfg *config.Config) {
+	queue.InitRedisClient(cfg)
+	minio.InitMinioClient(cfg)
+}
+
 func processNextMessage(ctx context.Context, workerID int) error {
 	// Timeout para processar cada mensagem (5 minutos)
 	processCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
@@ -111,7 +116,7 @@ func processNextMessage(ctx context.Context, workerID int) error {
 
 		// Limpeza dos arquivos temporários ao finalizar
 		defer func() {
-			os.Remove(inputPath)
+			os.Remove(inputPath) // todo: Handle these
 			os.Remove(outputPath)
 		}()
 

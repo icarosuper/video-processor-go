@@ -2,77 +2,49 @@ package queue
 
 import (
 	"context"
-	"fmt"
-	"os"
+	"log"
+	"video-processor/config"
 
 	"github.com/go-redis/redis/v8"
 )
 
-var ctx = context.Background()
-var rdb *redis.Client
+var (
+	ctx    = context.Background()
+	client *redis.Client
+	cfg    *config.Config
+)
 
-// Message representa uma mensagem da fila.
 type Message struct {
 	VideoID string
 }
 
-// InitQueue inicializa a conexão com o Redis.
-func InitQueue(redisAddr string) {
-	rdb = redis.NewClient(&redis.Options{
-		Addr: redisAddr,
+func InitRedisClient(configs *config.Config) {
+	cfg = configs
+
+	client = redis.NewClient(&redis.Options{
+		Addr: cfg.RedisHost,
 	})
-	// Testa a conexão
-	if err := rdb.Ping(ctx).Err(); err != nil {
-		fmt.Printf("[queue] Falha ao conectar ao Redis em %s: %v\n", redisAddr, err)
-		rdb = nil
+
+	if err := client.Ping(ctx).Err(); err != nil {
+		log.Fatalf("Error al connect redis client: %v\n", err)
 	} else {
-		fmt.Printf("[queue] Conectado ao Redis em %s com sucesso!\n", redisAddr)
+		log.Println("Cliente Redis conectado com sucesso")
 	}
 }
 
-func getRequestQueueName() string {
-	name := os.Getenv("PROCESSING_REQUEST_QUEUE")
-	if name == "" {
-		return "video_queue"
-	}
-	return name
-}
-
-func getFinishedQueueName() string {
-	name := os.Getenv("PROCESSING_FINISHED_QUEUE")
-	if name == "" {
-		return "video_success_queue"
-	}
-	return name
-}
-
-// ConsumeMessage consome uma mensagem da fila Redis (lista de requests).
 func ConsumeMessage() (*Message, error) {
-	if rdb == nil {
-		InitQueue(os.Getenv("REDIS_HOST"))
-	}
-	if rdb == nil {
-		return nil, fmt.Errorf("[queue] Não foi possível conectar ao Redis")
-	}
-	queueName := getRequestQueueName()
-	result, err := rdb.BLPop(ctx, 0, queueName).Result()
+	result, err := client.BLPop(ctx, 0, cfg.ProcessingRequestQueue).Result()
+
 	if err != nil {
 		return nil, err
 	}
 	if len(result) < 2 {
 		return nil, nil
 	}
+
 	return &Message{VideoID: result[1]}, nil
 }
 
-// PublishSuccessMessage publica uma mensagem de sucesso na fila de finished.
 func PublishSuccessMessage(videoID string) error {
-	if rdb == nil {
-		InitQueue(os.Getenv("REDIS_HOST"))
-	}
-	if rdb == nil {
-		return fmt.Errorf("[queue] Não foi possível conectar ao Redis")
-	}
-	queueName := getFinishedQueueName()
-	return rdb.LPush(ctx, queueName, videoID).Err()
+	return client.LPush(ctx, cfg.ProcessingRequestQueue, videoID).Err()
 }

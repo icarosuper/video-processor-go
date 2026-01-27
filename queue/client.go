@@ -46,5 +46,5 @@ func ConsumeMessage() (*Message, error) {
 }
 
 func PublishSuccessMessage(videoID string) error {
-	return client.LPush(ctx, cfg.ProcessingRequestQueue, videoID).Err()
+	return client.LPush(ctx, cfg.ProcessingFinishedQueue, videoID).Err()
 }

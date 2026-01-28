@@ -3,12 +3,12 @@ package minio
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"video-processor/config"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/rs/zerolog/log"
 )
 
 type VideoType string
@@ -38,23 +38,22 @@ func InitMinioClient(config *config.Config) {
 	})
 
 	if err != nil {
-		log.Fatalf("error initializing minio client: %v", err)
+		log.Fatal().Err(err).Msg("Erro ao inicializar cliente MinIO")
 	}
 
 	exists, err := client.BucketExists(context.Background(), cfg.MinioBucketName)
 	if err != nil {
-		log.Fatalf("erro ao verificar se o bucket existe: %v", err)
-	} else {
-		log.Printf("Bucket %s existe: %t\n", cfg.MinioBucketName, exists)
+		log.Fatal().Err(err).Str("bucket", cfg.MinioBucketName).Msg("Erro ao verificar se bucket existe")
 	}
+
+	log.Info().Str("bucket", cfg.MinioBucketName).Bool("exists", exists).Msg("Status do bucket MinIO")
 
 	if !exists {
 		err = client.MakeBucket(context.Background(), cfg.MinioBucketName, minio.MakeBucketOptions{})
 		if err != nil {
-			log.Fatalf("erro ao criar bucket: %v", err)
-		} else {
-			fmt.Printf("Bucket %s criado com sucesso!\n", cfg.MinioBucketName)
+			log.Fatal().Err(err).Str("bucket", cfg.MinioBucketName).Msg("Erro ao criar bucket")
 		}
+		log.Info().Str("bucket", cfg.MinioBucketName).Msg("Bucket criado com sucesso")
 	}
 }
 
@@ -69,31 +68,30 @@ func DownloadVideo(videoType VideoType, objectID, destPath string) error {
 	// Verifica se o objeto existe antes de tentar baixar
 	_, err := client.StatObject(ctx, cfg.MinioBucketName, objectPath, minio.StatObjectOptions{})
 	if err != nil {
-		log.Printf("[minio] objeto %s não encontrado: %v", objectPath, err)
+		log.Error().Err(err).Str("object", objectPath).Msg("Objeto não encontrado")
 		return err
 	}
 
 	object, err := client.GetObject(ctx, cfg.MinioBucketName, objectPath, minio.GetObjectOptions{})
 	if err != nil {
-		log.Printf("[minio] erro ao obter objeto %s: %v", objectPath, err)
+		log.Error().Err(err).Str("object", objectPath).Msg("Erro ao obter objeto")
 		return err
 	}
 	defer object.Close()
-	fmt.Printf("[minio] Download de %s iniciado...\n", objectPath)
+	log.Info().Str("object", objectPath).Msg("Download iniciado")
 
 	outFile, err := os.Create(destPath)
 	if err != nil {
-		log.Printf("[minio] erro ao criar arquivo destino %s: %v", destPath, err)
+		log.Error().Err(err).Str("destPath", destPath).Msg("Erro ao criar arquivo destino")
 		return err
 	}
 	defer outFile.Close()
-	fmt.Printf("[minio] Salvando arquivo em %s...\n", destPath)
 
 	if _, err := outFile.ReadFrom(object); err != nil {
-		log.Printf("[minio] erro ao ler objeto %s: %v", objectPath, err)
+		log.Error().Err(err).Str("object", objectPath).Msg("Erro ao ler objeto")
 		return err
 	}
-	fmt.Printf("[minio] Download de %s para %s concluído!\n", objectPath, destPath)
+	log.Info().Str("object", objectPath).Str("destPath", destPath).Msg("Download concluído")
 
 	return nil
 }
@@ -114,8 +112,15 @@ func UploadVideo(srcPath string, videoType VideoType, objectID string) error {
 	objectPath := getObjectPath(videoType, objectID)
 	_, err = client.PutObject(ctx, cfg.MinioBucketName, objectPath, file, fileInfo.Size(), minio.PutObjectOptions{ContentType: "video/mp4"})
 	if err != nil {
-		return fmt.Errorf("[minio] erro ao fazer upload: %w", err)
+		return fmt.Errorf("erro ao fazer upload: %w", err)
 	}
-	fmt.Printf("[minio] Upload de %s para bucket %s concluído!\n", objectPath, cfg.MinioBucketName)
+	log.Info().Str("object", objectPath).Str("bucket", cfg.MinioBucketName).Int64("size", fileInfo.Size()).Msg("Upload concluído")
 	return nil
+}
+
+// HealthCheck verifica se o cliente MinIO está saudável
+func HealthCheck() error {
+	ctx := context.Background()
+	_, err := client.BucketExists(ctx, cfg.MinioBucketName)
+	return err
 }

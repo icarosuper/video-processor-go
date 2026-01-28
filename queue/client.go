@@ -2,10 +2,10 @@ package queue
 
 import (
 	"context"
-	"log"
 	"video-processor/config"
 
 	"github.com/go-redis/redis/v8"
+	"github.com/rs/zerolog/log"
 )
 
 var (
@@ -26,10 +26,9 @@ func InitRedisClient(configs *config.Config) {
 	})
 
 	if err := client.Ping(ctx).Err(); err != nil {
-		log.Fatalf("Error al connect redis client: %v\n", err)
-	} else {
-		log.Println("Cliente Redis conectado com sucesso")
+		log.Fatal().Err(err).Msg("Erro ao conectar cliente Redis")
 	}
+	log.Info().Str("host", cfg.RedisHost).Msg("Cliente Redis conectado com sucesso")
 }
 
 func ConsumeMessage() (*Message, error) {
@@ -47,4 +46,9 @@ func ConsumeMessage() (*Message, error) {
 
 func PublishSuccessMessage(videoID string) error {
 	return client.LPush(ctx, cfg.ProcessingFinishedQueue, videoID).Err()
+}
+
+// HealthCheck verifica se o cliente Redis está saudável
+func HealthCheck() error {
+	return client.Ping(ctx).Err()
 }

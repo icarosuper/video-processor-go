@@ -3,10 +3,11 @@ package processor_steps
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"github.com/rs/zerolog/log"
 )
 
 // VideoMetadata contém metadados extraídos do vídeo.
@@ -84,8 +85,16 @@ func AnalyzeContent(inputPath string) error {
 	metadata.Bitrate, _ = strconv.ParseInt(probeData.Format.BitRate, 10, 64)
 
 	// Log metadados para debug
-	log.Printf("Metadados do vídeo: Duração=%.2fs, Resolução=%dx%d, Codec=%s, FPS=%.2f",
-		metadata.Duration, metadata.Width, metadata.Height, metadata.VideoCodec, metadata.FPS)
+	log.Info().
+		Float64("duration", metadata.Duration).
+		Int("width", metadata.Width).
+		Int("height", metadata.Height).
+		Str("videoCodec", metadata.VideoCodec).
+		Str("audioCodec", metadata.AudioCodec).
+		Float64("fps", metadata.FPS).
+		Int64("bitrate", metadata.Bitrate).
+		Int64("size", metadata.Size).
+		Msg("Metadados do vídeo extraídos")
 
 	return nil
 }

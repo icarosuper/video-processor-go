@@ -7,16 +7,16 @@ Este documento descreve a suíte de testes do projeto e como executá-los.
 ### Atual
 - **processor-steps**: 63.7% de cobertura
 - **metrics**: 100% (métricas testadas)
+- **integration**: Testes de integração com testcontainers
 
 ### Pacotes com Testes
-- ✅ `internal/processor/processor-steps` - Etapas do pipeline
-- ✅ `metrics` - Métricas Prometheus
+- ✅ `internal/processor/processor-steps` - Etapas do pipeline (unitários)
+- ✅ `metrics` - Métricas Prometheus (unitários)
+- ✅ `test/integration` - Testes de integração (Redis, MinIO, Pipeline)
 
 ### Pacotes sem Testes (Futuro)
 - ⏳ `main` - Lógica principal
 - ⏳ `config` - Configurações
-- ⏳ `queue` - Cliente Redis
-- ⏳ `minio` - Cliente MinIO
 
 ---
 
@@ -50,7 +50,21 @@ go test -v ./internal/processor/processor-steps/...
 
 # Apenas métricas
 go test -v ./metrics/...
+
+# Apenas testes de integração
+go test -v ./test/integration/...
 ```
+
+### Testes de Integração
+```bash
+# Executar testes de integração (requer Docker)
+go test -v ./test/integration/... -timeout 10m
+
+# Pular testes de integração
+SKIP_INTEGRATION_TESTS=true go test ./...
+```
+
+**Nota**: Os testes de integração são **pulados automaticamente** se o Docker não estiver disponível.
 
 ---
 
@@ -122,6 +136,64 @@ go test -v ./metrics/...
 - Contadores incrementam corretamente
 - Histogramas registram observações
 - Gauges atualizam valores
+
+---
+
+## 🔗 Testes de Integração (`test/integration/`)
+
+### Requisitos
+- **Docker** instalado e rodando
+- **testcontainers-go** para gerenciar containers
+
+### Arquivos de Teste
+
+#### `setup_test.go`
+Configuração dos containers de teste (Redis e MinIO).
+
+**Funções**:
+- `SetupContainers()` - Inicia Redis e MinIO containers
+- `TeardownContainers()` - Para e remove containers
+- `isDockerAvailable()` - Verifica se Docker está disponível
+
+---
+
+#### `queue_test.go` - Testes do Redis
+
+**Testes**:
+- ✅ `TestRedisQueue_PublishAndConsume` - Publica e consome mensagem
+- ✅ `TestRedisQueue_MultipleMessages` - Múltiplas mensagens em FIFO
+- ✅ `TestRedisQueue_EmptyQueue` - Timeout em fila vazia
+- ✅ `TestRedisQueue_SuccessQueue` - Workflow completo de filas
+
+---
+
+#### `minio_test.go` - Testes do MinIO
+
+**Testes**:
+- ✅ `TestMinIO_BucketOperations` - Criação e listagem de buckets
+- ✅ `TestMinIO_ObjectUploadDownload` - Upload e download de objetos
+- ✅ `TestMinIO_VideoWorkflow` - Workflow raw → processed
+- ✅ `TestMinIO_DownloadToFile` - Download para arquivo local
+- ✅ `TestMinIO_NonExistentObject` - Erro em objeto inexistente
+
+---
+
+#### `pipeline_test.go` - Testes do Pipeline Completo
+
+**Testes**:
+- ✅ `TestPipeline_ValidateStep` - Validação com MinIO
+- ✅ `TestPipeline_TranscodeStep` - Transcodificação end-to-end
+- ✅ `TestPipeline_FullWorkflow` - Workflow completo (Redis → MinIO → FFmpeg → MinIO)
+- ✅ `TestPipeline_ThumbnailGeneration` - Geração e upload de thumbnails
+
+**`TestPipeline_FullWorkflow` simula**:
+1. Adiciona video à fila de requisições
+2. Consome da fila (como worker)
+3. Baixa vídeo do MinIO
+4. Valida, analisa e transcodifica
+5. Faz upload do vídeo processado
+6. Publica na fila de sucesso
+7. Verifica resultado
 
 ---
 

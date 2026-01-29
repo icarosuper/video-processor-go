@@ -1069,16 +1069,15 @@ func (p *Processor) processVideo(ctx context.Context, videoID string) error {
 
 ## 🧪 Testes Necessários
 
-### Testes Unitários
+### Testes Unitários ✅
 - [x] Cada etapa do pipeline individualmente (63.7% cobertura)
 - [x] Métricas Prometheus (100% cobertura)
-- [ ] Clientes de MinIO e Redis (futuro)
 - [ ] Parser de configurações (futuro)
 
-### Testes de Integração
-- [ ] Pipeline completo com vídeo real
-- [ ] Comunicação Redis ↔ Workers
-- [ ] Upload/Download MinIO
+### Testes de Integração ✅
+- [x] Pipeline completo com vídeo real (testcontainers)
+- [x] Comunicação Redis ↔ Workers (testcontainers)
+- [x] Upload/Download MinIO (testcontainers)
 
 ### Testes de Carga
 - [ ] 100 vídeos simultâneos

@@ -6,6 +6,9 @@
 |---|---|---|
 | `internal/processor/processor-steps` | 63.7% | Unitários |
 | `metrics` | ~100% | Unitários |
+| `internal/circuitbreaker` | ~100% | Unitários |
+| `internal/webhook` | ~100% | Unitários |
+| `internal/telemetry` | ~100% | Unitários |
 | `test/integration` | — | Integração |
 
 **Pacotes sem testes**: `main`, `config`, `queue`, `minio`
@@ -76,6 +79,34 @@ go test -v ./test/integration/... -timeout 10m
 - `TestProcessingStepDuration_MultipleSteps`
 - `TestActiveWorkers_SetAndGet`
 - `TestQueueSize_SetAndGet`
+
+### `internal/circuitbreaker/circuitbreaker_test.go`
+- `TestMinIO_EstadoInicial_Fechado`
+- `TestRedis_EstadoInicial_Fechado`
+- `TestCircuitBreaker_AbreApos5FalhasConsecutivas`
+- `TestCircuitBreaker_AbreApos3FalhasConsecutivas_Redis`
+- `TestCircuitBreaker_RejeitaChamadasQuandoAberto`
+- `TestCircuitBreaker_NaoAbreComFalhasNaoConsecutivas`
+- `TestCircuitBreaker_RetornaResultadoQuandoFechado`
+
+### `internal/webhook/webhook_test.go`
+- `TestNotify_Sucesso`
+- `TestNotify_ContentTypeJSON`
+- `TestNotify_ComHMAC_AssinaturaCorreta`
+- `TestNotify_SemSecret_SemHeader`
+- `TestNotify_RetryEmFalha`
+- `TestNotify_ErroApos3Tentativas`
+- `TestNotify_URLInvalida`
+- `TestNotify_ServidorIndisponivel`
+- `TestPayload_SerializacaoJSON`
+
+### `internal/telemetry/telemetry_test.go`
+- `TestInit_EndpointVazio_Noop`
+- `TestInit_EndpointVazio_InstalaNoop`
+- `TestTracer_RetornaNaoNulo`
+- `TestTracer_CriaSpan`
+- `TestTracerName_Constante`
+- `TestInit_EndpointInvalido_RetornaErro`
 
 ---
 
@@ -158,12 +189,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.25'
       - run: sudo apt-get install -y ffmpeg
       - run: go test -v ./... -cover -timeout 10m
 ```
 
 ---
 
-**Última Atualização**: 2026-03-25
-**Cobertura Atual**: 63.7% (processor-steps)
+**Última Atualização**: 2026-03-26
+**Cobertura Atual**: 63.7% (processor-steps), ~100% (metrics, circuitbreaker, webhook, telemetry)

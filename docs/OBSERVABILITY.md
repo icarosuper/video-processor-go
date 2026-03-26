@@ -53,23 +53,40 @@ Tempo de cada etapa do pipeline.
 
 ### `active_workers` (Gauge)
 
-> **Limitação conhecida**: este valor é definido uma vez no startup com o total de workers configurados e nunca é atualizado. Não reflete workers em processamento vs. ociosos.
+Número de workers com um job em andamento no momento. Incrementado ao iniciar cada job, decrementado ao concluir.
 
 ### `queue_size` (Gauge)
 
-> **Limitação conhecida**: a métrica existe mas nunca é atualizada no código. O valor será sempre 0.
+Tamanho atual da fila de entrada. Atualizado a cada 30 segundos via `LLEN` no Redis.
 
 ### `video_size_bytes` (Histogram)
 
-> **Limitação conhecida**: a métrica existe mas não é registrada em nenhum ponto do código.
+Tamanho dos vídeos baixados do MinIO, registrado após o download.
 
 **Buckets**: exponencial de 1MB a ~16GB
 
 ---
 
+## Grafana Dashboard
+
+O projeto inclui um dashboard pré-configurado em `grafana/provisioning/dashboards/video-processor.json`, carregado automaticamente ao subir o `docker-compose`.
+
+**Painéis disponíveis:**
+- Workers ativos e tamanho da fila (com thresholds de cor)
+- Total de vídeos processados por status
+- Taxa de sucesso (gauge %)
+- Throughput em vídeos/min
+- Duração por etapa p50/p90/p99
+- Duração total do job p50/p90/p99
+- Distribuição de tamanho dos vídeos
+
+Acesse em `http://localhost:3000` (admin/admin) após `docker-compose up`.
+
+---
+
 ## Integração com Prometheus
 
-Adicione ao `prometheus.yml`:
+O `prometheus.yml` já está configurado em `prometheus/prometheus.yml` e montado no container via `docker-compose`. Para rodar o worker fora do Docker, adicione ao seu `prometheus.yml`:
 
 ```yaml
 scrape_configs:
@@ -172,4 +189,4 @@ curl http://localhost:8080/metrics | head -20
 
 ---
 
-**Última Atualização**: 2026-03-25
+**Última Atualização**: 2026-03-26

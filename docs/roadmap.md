@@ -16,7 +16,7 @@ O pipeline FFmpeg funciona. A infraestrutura básica existe. Mas faltam as peça
 - Upload de todos os artefatos ao MinIO (thumbnails, áudio, preview, segmentos HLS)
 - Workers concorrentes com graceful shutdown funcional
 - Métricas Prometheus, health check, logging estruturado
-- Testes unitários (88.2% no pipeline) e de integração (testcontainers)
+- Testes unitários (pipeline, metrics, circuitbreaker, webhook, telemetry) e de integração (testcontainers)
 - **B1**: Workers não travavam mais no shutdown — `ConsumeMessage(ctx)`
 - **B2**: Artefatos das etapas 4–7 agora chegam ao MinIO
 - **B3**: `docker-compose.yml` com todas as env vars obrigatórias
@@ -51,12 +51,17 @@ O pipeline FFmpeg funciona. A infraestrutura básica existe. Mas faltam as peça
 
 ---
 
+## 🟡 Melhorias recentes
+
+- ✅ **Dashboard Grafana**: `grafana/provisioning/dashboards/video-processor.json` com 9 painéis (workers, fila, throughput, p50/p90/p99 por etapa, tamanho de vídeos); Prometheus e Grafana no `docker-compose`
+
+---
+
 ## 🔵 Longo Prazo — Escalabilidade e features avançadas
 
 - **Auto-scaling**: aumentar workers baseado no tamanho da fila
 - **Escala horizontal**: múltiplas instâncias do worker em máquinas diferentes
 - **Priorização de fila**: vídeos curtos na frente, vídeos longos em fila separada
-- **Dashboard Grafana**: configuração pronta para uso
 
 ---
 

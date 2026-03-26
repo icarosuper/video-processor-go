@@ -67,11 +67,14 @@ func DownloadVideo(videoType VideoType, objectID, destPath string) error {
 	ctx := context.Background()
 	objectPath := getObjectPath(videoType, objectID)
 
-	// Verifica se o objeto existe antes de tentar baixar
-	_, err := client.StatObject(ctx, cfg.MinioBucketName, objectPath, minio.StatObjectOptions{})
+	// Verifica se o objeto existe e valida o tamanho antes de baixar
+	info, err := client.StatObject(ctx, cfg.MinioBucketName, objectPath, minio.StatObjectOptions{})
 	if err != nil {
 		log.Error().Err(err).Str("object", objectPath).Msg("Objeto não encontrado")
 		return err
+	}
+	if maxBytes := cfg.MaxFileSizeMB * 1024 * 1024; info.Size > maxBytes {
+		return fmt.Errorf("vídeo muito grande: %.0fMB (máximo: %dMB)", float64(info.Size)/1024/1024, cfg.MaxFileSizeMB)
 	}
 
 	object, err := client.GetObject(ctx, cfg.MinioBucketName, objectPath, minio.GetObjectOptions{})

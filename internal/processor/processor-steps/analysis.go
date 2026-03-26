@@ -23,7 +23,7 @@ type VideoMetadata struct {
 }
 
 // AnalyzeContent extrai metadados e informações técnicas do vídeo.
-func AnalyzeContent(inputPath string) error {
+func AnalyzeContent(inputPath string) (*VideoMetadata, error) {
 	cmd := exec.Command("ffprobe",
 		"-v", "quiet",
 		"-print_format", "json",
@@ -34,7 +34,7 @@ func AnalyzeContent(inputPath string) error {
 
 	output, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("falha na análise: %w", err)
+		return nil, fmt.Errorf("falha na análise: %w", err)
 	}
 
 	// Parse JSON output
@@ -54,7 +54,7 @@ func AnalyzeContent(inputPath string) error {
 	}
 
 	if err := json.Unmarshal(output, &probeData); err != nil {
-		return fmt.Errorf("falha ao parsear JSON: %w", err)
+		return nil, fmt.Errorf("falha ao parsear JSON: %w", err)
 	}
 
 	// Extrair metadados
@@ -96,5 +96,5 @@ func AnalyzeContent(inputPath string) error {
 		Int64("size", metadata.Size).
 		Msg("Metadados do vídeo extraídos")
 
-	return nil
+	return metadata, nil
 }

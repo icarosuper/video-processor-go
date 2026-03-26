@@ -4,7 +4,7 @@
 
 Worker assíncrono que uma API chama para processar vídeos enviados por usuários (modelo YouTube): recebe um `videoID`, processa em pipeline de 7 etapas com FFmpeg, e entrega os artefatos no MinIO.
 
-## Status Atual: ~30% pronto para produção
+## Status Atual: ~55% pronto para produção
 
 O pipeline FFmpeg funciona. A infraestrutura básica existe. Mas faltam as peças que tornam o sistema **confiável e integrável** com uma API real.
 
@@ -27,6 +27,9 @@ O pipeline FFmpeg funciona. A infraestrutura básica existe. Mas faltam as peça
 - **C4**: Recovery de jobs órfãos — `StartRecovery` verifica a cada minuto jobs em `processing` com `updated_at` antigo e os recoloca na fila principal
 - **P2**: Retry automático — `SetJobFailed` incrementa `RetryCount`; até 3 tentativas o job é recolocado na fila; acima disso vai para DLQ
 - **P3**: Dead letter queue — `{queue}:dead` recebe jobs que esgotaram tentativas; state permanece `failed` com mensagem de erro auditável
+- **P4**: Metadados do vídeo persistidos — `AnalyzeContent` retorna `*VideoMetadata`; gravados no estado `done` do job; disponíveis para a API via `GetJobState`
+- **P5**: Validação de entrada mais rigorosa — limite de tamanho configurável via `MAX_FILE_SIZE_MB` (default 5GB); verificado antes do download com `StatObject`
+- **Métricas operacionais**: `active_workers` Inc/Dec por job; `queue_size` atualizado a cada 30s; `video_size_bytes` registrado após download
 
 ---
 
@@ -48,33 +51,11 @@ Hoje gera um único MP4 transcodificado. Para streaming adaptativo funcionar, pr
 
 **Solução**: etapa de transcodificação gerar múltiplos outputs; playlist HLS master referenciando cada qualidade.
 
-### P2. Retry com exponential backoff
-
-Falha transitória (MinIO instável por 2s, FFmpeg com OOM) descarta o job permanentemente. Deveria tentar N vezes antes de mover para dead letter queue.
-
-### P3. Dead Letter Queue
-
-Jobs com falha permanente (arquivo corrompido, codec não suportado) precisam de um destino auditável, não simplesmente desaparecer.
-
-### P4. Persistência de metadados do vídeo
-
-A etapa de análise extrai duração, codec, resolução, bitrate — mas só loga. Esses dados deveriam ser gravados junto ao estado do job (C1) para a API devolver ao usuário.
-
-### P5. Validação de entrada mais rigorosa
-
-Hoje qualquer arquivo passa para o FFmpeg. Falta:
-- Limite de tamanho de arquivo (ex: 5GB max)
-- Whitelist de codecs/containers aceitos
-- Verificação de que o arquivo não é malicioso antes de processar
-
 ---
 
 ## 🟡 Melhorias — Qualidade operacional
 
 ### Observabilidade
-- `active_workers`: valor estático no startup, nunca atualizado
-- `queue_size`: métrica existe mas nunca é populada
-- `video_size_bytes`: métrica existe mas nunca é registrada
 - Tracing distribuído por job (OpenTelemetry) para ver tempo por etapa em produção
 
 ### Resiliência

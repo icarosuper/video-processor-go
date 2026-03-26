@@ -42,13 +42,26 @@ func main() {
 
 	log.Info().Int("workers", numWorkers).Msg("Iniciando video-processor")
 
-	// Inicializar métrica de workers ativos
-	metrics.ActiveWorkers.Set(float64(numWorkers))
-
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Goroutine que recoloca jobs órfãos (crash durante processamento)
 	go queue.StartRecovery(ctx, 10*time.Minute)
+
+	// Goroutine que atualiza a métrica de tamanho da fila a cada 30 segundos
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if size, err := queue.GetQueueSize(); err == nil {
+					metrics.QueueSize.Set(float64(size))
+				}
+			}
+		}
+	}()
 	defer cancel()
 
 	sigChan := make(chan os.Signal, 1)
@@ -167,6 +180,9 @@ func processNextMessage(ctx context.Context, workerID int) error {
 		// jobErr rastreia o erro final para o defer abaixo.
 		var jobErr error
 
+		metrics.ActiveWorkers.Inc()
+		defer metrics.ActiveWorkers.Dec()
+
 		defer func() {
 			if jobErr != nil {
 				state, err := queue.SetJobFailed(videoID, jobErr)
@@ -207,6 +223,9 @@ func processNextMessage(ctx context.Context, workerID int) error {
 			metrics.VideosProcessedTotal.WithLabelValues("error").Inc()
 			done <- jobErr
 			return
+		}
+		if info, err := os.Stat(inputPath); err == nil {
+			metrics.VideoSizeBytes.Observe(float64(info.Size()))
 		}
 
 		result, err := processor.ProcessVideo(inputPath, outputPath)
@@ -259,7 +278,8 @@ func processNextMessage(ctx context.Context, workerID int) error {
 
 		// Registra estado final e métricas de sucesso
 		artifacts := buildJobArtifacts(videoID, processedID, result)
-		if err := queue.SetJobDone(videoID, artifacts); err != nil {
+		metadata := toJobMetadata(result)
+		if err := queue.SetJobDone(videoID, artifacts, metadata); err != nil {
 			log.Warn().Err(err).Str("videoID", videoID).Msg("Falha ao atualizar estado do job para done")
 		}
 
@@ -276,6 +296,23 @@ func processNextMessage(ctx context.Context, workerID int) error {
 		return err
 	case <-processCtx.Done():
 		return fmt.Errorf("operação cancelada: %v", processCtx.Err())
+	}
+}
+
+// toJobMetadata converte os metadados do pipeline para o tipo do pacote queue.
+func toJobMetadata(result *processor.ProcessingResult) *queue.VideoMetadata {
+	if result.Metadata == nil {
+		return nil
+	}
+	return &queue.VideoMetadata{
+		Duration:   result.Metadata.Duration,
+		Width:      result.Metadata.Width,
+		Height:     result.Metadata.Height,
+		VideoCodec: result.Metadata.VideoCodec,
+		AudioCodec: result.Metadata.AudioCodec,
+		FPS:        result.Metadata.FPS,
+		Bitrate:    result.Metadata.Bitrate,
+		Size:       result.Metadata.Size,
 	}
 }
 

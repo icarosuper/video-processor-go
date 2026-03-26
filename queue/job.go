@@ -7,6 +7,18 @@ import (
 	"time"
 )
 
+// VideoMetadata espelha os metadados extraídos pela etapa de análise do pipeline.
+type VideoMetadata struct {
+	Duration   float64 `json:"duration"`
+	Width      int     `json:"width"`
+	Height     int     `json:"height"`
+	VideoCodec string  `json:"video_codec"`
+	AudioCodec string  `json:"audio_codec"`
+	FPS        float64 `json:"fps"`
+	Bitrate    int64   `json:"bitrate"`
+	Size       int64   `json:"size"`
+}
+
 // JobStatus representa o estado de um job de processamento.
 type JobStatus string
 
@@ -33,12 +45,13 @@ type JobArtifacts struct {
 
 // JobState representa o estado completo de um job de processamento.
 type JobState struct {
-	Status     JobStatus     `json:"status"`
-	Error      string        `json:"error,omitempty"`
-	Artifacts  *JobArtifacts `json:"artifacts,omitempty"`
-	RetryCount int           `json:"retry_count"`
-	CreatedAt  int64         `json:"created_at"`
-	UpdatedAt  int64         `json:"updated_at"`
+	Status     JobStatus      `json:"status"`
+	Error      string         `json:"error,omitempty"`
+	Artifacts  *JobArtifacts  `json:"artifacts,omitempty"`
+	Metadata   *VideoMetadata `json:"metadata,omitempty"`
+	RetryCount int            `json:"retry_count"`
+	CreatedAt  int64          `json:"created_at"`
+	UpdatedAt  int64          `json:"updated_at"`
 }
 
 func jobKey(videoID string) string {
@@ -77,14 +90,15 @@ func SetJobProcessing(videoID string) error {
 	return setJobState(videoID, *existing)
 }
 
-// SetJobDone atualiza o estado do job para done com os artefatos gerados.
-func SetJobDone(videoID string, artifacts JobArtifacts) error {
+// SetJobDone atualiza o estado do job para done com os artefatos e metadados gerados.
+func SetJobDone(videoID string, artifacts JobArtifacts, metadata *VideoMetadata) error {
 	existing, _ := GetJobState(videoID)
 	if existing == nil {
 		existing = &JobState{CreatedAt: time.Now().Unix()}
 	}
 	existing.Status = JobStatusDone
 	existing.Artifacts = &artifacts
+	existing.Metadata = metadata
 	existing.Error = ""
 	return setJobState(videoID, *existing)
 }

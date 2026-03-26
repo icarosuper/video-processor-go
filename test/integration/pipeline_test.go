@@ -261,7 +261,7 @@ func TestPipeline_FullWorkflow(t *testing.T) {
 		t.Fatalf("Validation failed: %v", err)
 	}
 
-	if err := processor_steps.AnalyzeContent(inputPath); err != nil {
+	if _, err := processor_steps.AnalyzeContent(inputPath); err != nil {
 		t.Logf("Analysis warning: %v", err) // Non-critical
 	}
 

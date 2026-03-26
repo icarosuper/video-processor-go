@@ -23,6 +23,9 @@ type Config struct {
 
 	// Workers
 	WorkerCount int `env:"WORKER_COUNT" default:"0"`
+
+	// Processamento
+	MaxFileSizeMB int64 `env:"MAX_FILE_SIZE_MB" default:"5120"` // 5 GB
 }
 
 func LoadConfig() *Config {

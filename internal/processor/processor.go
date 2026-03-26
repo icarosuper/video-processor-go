@@ -20,6 +20,7 @@ type ProcessingResult struct {
 	AudioPath     string
 	PreviewPath   string
 	StreamingDir  string
+	Metadata      *processor_steps.VideoMetadata // nil se a análise falhou
 }
 
 // ProcessVideo executa todas as etapas do pipeline de processamento de vídeo.
@@ -47,8 +48,10 @@ func ProcessVideo(inputPath, outputPath string) (*ProcessingResult, error) {
 	// 2. Análise de conteúdo
 	log.Info().Msg("Etapa 2/7: Analisando conteúdo")
 	start = time.Now()
-	if err := processor_steps.AnalyzeContent(inputPath); err != nil {
+	if metadata, err := processor_steps.AnalyzeContent(inputPath); err != nil {
 		log.Warn().Err(err).Msg("Falha na análise de conteúdo")
+	} else {
+		result.Metadata = metadata
 	}
 	metrics.ProcessingStepDuration.WithLabelValues("analyze").Observe(time.Since(start).Seconds())
 

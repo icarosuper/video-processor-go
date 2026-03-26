@@ -5,34 +5,44 @@ import (
 )
 
 func TestAnalyzeContent_ValidVideo(t *testing.T) {
-	// Gerar vídeo de teste
 	videoPath := GenerateTestVideo(t, 5)
 
-	// Analisar conteúdo
-	err := AnalyzeContent(videoPath)
+	metadata, err := AnalyzeContent(videoPath)
 	if err != nil {
 		t.Fatalf("AnalyzeContent() falhou: %v", err)
 	}
-
-	// A função atualmente apenas loga os metadados, não retorna nada
-	// Este teste verifica que a análise não falha com vídeo válido
+	if metadata == nil {
+		t.Fatal("AnalyzeContent() retornou metadata nil")
+	}
+	if metadata.Duration <= 0 {
+		t.Errorf("AnalyzeContent() retornou duração inválida: %v", metadata.Duration)
+	}
+	if metadata.Width == 0 || metadata.Height == 0 {
+		t.Errorf("AnalyzeContent() retornou resolução inválida: %dx%d", metadata.Width, metadata.Height)
+	}
+	if metadata.VideoCodec == "" {
+		t.Error("AnalyzeContent() não retornou codec de vídeo")
+	}
 }
 
 func TestAnalyzeContent_InvalidVideo(t *testing.T) {
-	// Criar arquivo inválido
 	invalidPath := CreateInvalidFile(t)
 
-	// Analisar conteúdo
-	err := AnalyzeContent(invalidPath)
+	metadata, err := AnalyzeContent(invalidPath)
 	if err == nil {
 		t.Error("AnalyzeContent() deveria falhar com vídeo inválido")
+	}
+	if metadata != nil {
+		t.Error("AnalyzeContent() deveria retornar nil para vídeo inválido")
 	}
 }
 
 func TestAnalyzeContent_NonExistentVideo(t *testing.T) {
-	// Tentar analisar arquivo inexistente
-	err := AnalyzeContent("/caminho/que/nao/existe.mp4")
+	metadata, err := AnalyzeContent("/caminho/que/nao/existe.mp4")
 	if err == nil {
 		t.Error("AnalyzeContent() deveria falhar com arquivo inexistente")
+	}
+	if metadata != nil {
+		t.Error("AnalyzeContent() deveria retornar nil para arquivo inexistente")
 	}
 }

@@ -107,6 +107,11 @@ func recoverStuckJobs(stuckTimeout time.Duration) {
 	}
 }
 
+// GetQueueSize retorna o número de jobs aguardando na fila de requisições.
+func GetQueueSize() (int64, error) {
+	return client.LLen(context.Background(), cfg.ProcessingRequestQueue).Result()
+}
+
 // HealthCheck verifica se o cliente Redis está saudável
 func HealthCheck() error {
 	return client.Ping(context.Background()).Err()

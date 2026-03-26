@@ -16,8 +16,12 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
+	"go.opentelemetry.io/otel/attribute"
+	oteltrace "go.opentelemetry.io/otel/trace"
+
 	"video-processor/config"
 	"video-processor/internal/processor"
+	"video-processor/internal/telemetry"
 	"video-processor/internal/webhook"
 	"video-processor/metrics"
 	"video-processor/minio"
@@ -30,6 +34,13 @@ func main() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 
 	cfg := config.LoadConfig()
+
+	// Inicializar tracing (no-op se OTEL_ENDPOINT não estiver configurado)
+	shutdownTracing, err := telemetry.Init(context.Background(), cfg.OTelServiceName, cfg.OTelEndpoint)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Erro ao inicializar tracing")
+	}
+	defer shutdownTracing(context.Background())
 
 	initClients(cfg)
 
@@ -171,7 +182,13 @@ func processNextMessage(ctx context.Context, workerID int, cfg *config.Config) e
 		log.Warn().Err(err).Str("videoID", videoID).Msg("Falha ao atualizar estado do job para processing")
 	}
 
-	processCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	// Span raiz do job — engloba todo o processamento incluindo upload
+	jobCtx, span := telemetry.Tracer().Start(ctx, "process_job",
+		oteltrace.WithAttributes(attribute.String("video.id", videoID)),
+	)
+	defer span.End()
+
+	processCtx, cancel := context.WithTimeout(jobCtx, 5*time.Minute)
 	defer cancel()
 
 	done := make(chan error, 1)

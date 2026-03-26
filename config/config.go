@@ -25,6 +25,10 @@ type Config struct {
 	// HTTP
 	HTTPPort string `env:"HTTP_PORT" envDefault:"8080"`
 
+	// Observabilidade
+	OTelEndpoint    string `env:"OTEL_ENDPOINT"`                              // opcional: endpoint OTLP (ex: jaeger:4318); vazio = no-op
+	OTelServiceName string `env:"OTEL_SERVICE_NAME" envDefault:"video-processor"` // nome do serviço nos traces
+
 	// Webhook
 	WebhookSecret string `env:"WEBHOOK_SECRET"` // opcional: assina requisições com HMAC-SHA256
 

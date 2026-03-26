@@ -13,6 +13,7 @@ queue/client.go                  # Redis BRPopLPush (consumo atômico) + recover
 queue/job.go                     # estado do job (pending→processing→done/failed), retry, DLQ
 internal/webhook/webhook.go      # notificação POST ao callbackURL com retry e HMAC opcional
 internal/circuitbreaker/circuitbreaker.go  # circuit breakers para MinIO e Redis
+internal/telemetry/telemetry.go            # OpenTelemetry: init, tracer, shutdown
 minio/client.go                  # download/upload de vídeos e artefatos
 metrics/metrics.go               # métricas Prometheus (promauto)
 internal/processor/processor.go  # orquestrador das 7 etapas, retorna ProcessingResult
@@ -21,7 +22,7 @@ internal/processor/processor-steps/*.go  # cada etapa do pipeline
 
 ## Estado atual (~95% pronto para produção)
 
-O pipeline FFmpeg funciona end-to-end com confiabilidade de jobs (retry, DLQ, recovery de órfãos), webhook de notificação, metadados persistidos, métricas operacionais reais, HLS adaptativo com múltiplas resoluções, circuit breakers para MinIO/Redis e timeouts individuais por etapa. Itens restantes: observabilidade avançada (OpenTelemetry) e escalabilidade.
+O pipeline FFmpeg funciona end-to-end com confiabilidade de jobs (retry, DLQ, recovery de órfãos), webhook de notificação, metadados persistidos, métricas operacionais reais, HLS adaptativo com múltiplas resoluções, circuit breakers para MinIO/Redis e timeouts individuais por etapa. Itens restantes: escalabilidade (auto-scaling, múltiplas instâncias, priorização de fila) e Dashboard Grafana.
 
 Ver `docs/roadmap.md` para o plano completo.
 

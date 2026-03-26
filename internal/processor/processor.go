@@ -7,14 +7,17 @@ import (
 	"path/filepath"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	oteltrace "go.opentelemetry.io/otel/trace"
 	"github.com/rs/zerolog/log"
 
 	processor_steps "video-processor/internal/processor/processor-steps"
+	"video-processor/internal/telemetry"
 	"video-processor/metrics"
 )
 
 // Timeouts individuais por etapa do pipeline.
-// Etapas críticas têm limites maiores; etapas rápidas têm limites curtos.
 const (
 	stepTimeoutValidate   = 30 * time.Second
 	stepTimeoutAnalyze    = 30 * time.Second
@@ -22,23 +25,21 @@ const (
 	stepTimeoutThumbnails = 60 * time.Second
 	stepTimeoutAudio      = 2 * time.Minute
 	stepTimeoutPreview    = 2 * time.Minute
-	stepTimeoutStreaming   = 4 * time.Minute
+	stepTimeoutStreaming  = 4 * time.Minute
 )
 
 // ProcessingResult contém os caminhos dos artefatos gerados pelo pipeline.
 // TempDir deve ser removido pelo chamador após os uploads.
 type ProcessingResult struct {
 	TempDir       string
-	ThumbnailsDir string // vazio se a etapa falhou
+	ThumbnailsDir string
 	AudioPath     string
 	PreviewPath   string
 	StreamingDir  string
-	Metadata      *processor_steps.VideoMetadata // nil se a análise falhou
+	Metadata      *processor_steps.VideoMetadata
 }
 
 // ProcessVideo executa todas as etapas do pipeline de processamento de vídeo.
-// Retorna ProcessingResult mesmo em caso de erro, para que o chamador possa limpar TempDir.
-// O ctx pai controla o cancelamento global; cada etapa recebe seu próprio sub-contexto com timeout.
 func ProcessVideo(ctx context.Context, inputPath, outputPath string) (*ProcessingResult, error) {
 	baseDir := filepath.Dir(outputPath)
 	videoBaseName := filepath.Base(inputPath)
@@ -53,97 +54,100 @@ func ProcessVideo(ctx context.Context, inputPath, outputPath string) (*Processin
 
 	// 1. Validação
 	log.Info().Msg("Etapa 1/7: Validando vídeo")
-	start := time.Now()
-	stepCtx, cancel := context.WithTimeout(ctx, stepTimeoutValidate)
-	err := processor_steps.ValidateVideo(stepCtx, inputPath)
-	cancel()
-	if err != nil {
+	if err := runStep(ctx, "validate", stepTimeoutValidate, func(stepCtx context.Context) error {
+		return processor_steps.ValidateVideo(stepCtx, inputPath)
+	}); err != nil {
 		return result, fmt.Errorf("validação falhou: %w", err)
 	}
-	metrics.ProcessingStepDuration.WithLabelValues("validate").Observe(time.Since(start).Seconds())
 
 	// 2. Análise de conteúdo
 	log.Info().Msg("Etapa 2/7: Analisando conteúdo")
-	start = time.Now()
-	stepCtx, cancel = context.WithTimeout(ctx, stepTimeoutAnalyze)
-	metadata, err := processor_steps.AnalyzeContent(stepCtx, inputPath)
-	cancel()
-	if err != nil {
-		log.Warn().Err(err).Msg("Falha na análise de conteúdo")
-	} else {
+	_ = runStep(ctx, "analyze", stepTimeoutAnalyze, func(stepCtx context.Context) error {
+		metadata, err := processor_steps.AnalyzeContent(stepCtx, inputPath)
+		if err != nil {
+			log.Warn().Err(err).Msg("Falha na análise de conteúdo")
+			return err
+		}
 		result.Metadata = metadata
-	}
-	metrics.ProcessingStepDuration.WithLabelValues("analyze").Observe(time.Since(start).Seconds())
+		return nil
+	})
 
 	// 3. Transcodificação (etapa crítica)
 	log.Info().Msg("Etapa 3/7: Transcodificando vídeo")
-	start = time.Now()
-	stepCtx, cancel = context.WithTimeout(ctx, stepTimeoutTranscode)
-	err = processor_steps.TranscodeVideo(stepCtx, inputPath, outputPath)
-	cancel()
-	if err != nil {
+	if err := runStep(ctx, "transcode", stepTimeoutTranscode, func(stepCtx context.Context) error {
+		return processor_steps.TranscodeVideo(stepCtx, inputPath, outputPath)
+	}); err != nil {
 		return result, fmt.Errorf("transcodificação falhou: %w", err)
 	}
-	metrics.ProcessingStepDuration.WithLabelValues("transcode").Observe(time.Since(start).Seconds())
 
 	transcodedPath := outputPath
 
 	// 4. Geração de thumbnails
 	log.Info().Msg("Etapa 4/7: Gerando thumbnails")
-	start = time.Now()
 	thumbnailsDir := filepath.Join(tempDir, "thumbnails")
-	stepCtx, cancel = context.WithTimeout(ctx, stepTimeoutThumbnails)
-	err = processor_steps.GenerateThumbnails(stepCtx, transcodedPath, thumbnailsDir)
-	cancel()
-	if err != nil {
+	if err := runStep(ctx, "thumbnails", stepTimeoutThumbnails, func(stepCtx context.Context) error {
+		return processor_steps.GenerateThumbnails(stepCtx, transcodedPath, thumbnailsDir)
+	}); err != nil {
 		log.Warn().Err(err).Msg("Falha ao gerar thumbnails")
 	} else {
 		result.ThumbnailsDir = thumbnailsDir
 	}
-	metrics.ProcessingStepDuration.WithLabelValues("thumbnails").Observe(time.Since(start).Seconds())
 
 	// 5. Extração de áudio
 	log.Info().Msg("Etapa 5/7: Extraindo áudio")
-	start = time.Now()
 	audioPath := filepath.Join(tempDir, "audio.mp3")
-	stepCtx, cancel = context.WithTimeout(ctx, stepTimeoutAudio)
-	err = processor_steps.ExtractAudio(stepCtx, transcodedPath, audioPath)
-	cancel()
-	if err != nil {
+	if err := runStep(ctx, "audio", stepTimeoutAudio, func(stepCtx context.Context) error {
+		return processor_steps.ExtractAudio(stepCtx, transcodedPath, audioPath)
+	}); err != nil {
 		log.Warn().Err(err).Msg("Falha na extração de áudio")
 	} else {
 		result.AudioPath = audioPath
 	}
-	metrics.ProcessingStepDuration.WithLabelValues("audio").Observe(time.Since(start).Seconds())
 
 	// 6. Geração de preview
 	log.Info().Msg("Etapa 6/7: Gerando preview")
-	start = time.Now()
 	previewPath := filepath.Join(tempDir, "preview.mp4")
-	stepCtx, cancel = context.WithTimeout(ctx, stepTimeoutPreview)
-	err = processor_steps.GeneratePreview(stepCtx, transcodedPath, previewPath)
-	cancel()
-	if err != nil {
+	if err := runStep(ctx, "preview", stepTimeoutPreview, func(stepCtx context.Context) error {
+		return processor_steps.GeneratePreview(stepCtx, transcodedPath, previewPath)
+	}); err != nil {
 		log.Warn().Err(err).Msg("Falha na geração de preview")
 	} else {
 		result.PreviewPath = previewPath
 	}
-	metrics.ProcessingStepDuration.WithLabelValues("preview").Observe(time.Since(start).Seconds())
 
-	// 7. Segmentação para streaming (usa o input original para evitar dupla transcodificação)
+	// 7. Segmentação para streaming
 	log.Info().Msg("Etapa 7/7: Segmentando para streaming")
-	start = time.Now()
 	streamingDir := filepath.Join(tempDir, "streaming")
-	stepCtx, cancel = context.WithTimeout(ctx, stepTimeoutStreaming)
-	err = processor_steps.SegmentForStreaming(stepCtx, inputPath, streamingDir)
-	cancel()
-	if err != nil {
+	if err := runStep(ctx, "streaming", stepTimeoutStreaming, func(stepCtx context.Context) error {
+		return processor_steps.SegmentForStreaming(stepCtx, inputPath, streamingDir)
+	}); err != nil {
 		log.Warn().Err(err).Msg("Falha na segmentação para streaming")
 	} else {
 		result.StreamingDir = streamingDir
 	}
-	metrics.ProcessingStepDuration.WithLabelValues("streaming").Observe(time.Since(start).Seconds())
 
 	log.Info().Msg("Pipeline de processamento concluído com sucesso")
 	return result, nil
+}
+
+// runStep executa uma etapa do pipeline dentro de um span OTel e registra duração via Prometheus.
+// O span é marcado como erro se a etapa falhar.
+func runStep(ctx context.Context, name string, timeout time.Duration, fn func(context.Context) error) error {
+	stepCtx, span := telemetry.Tracer().Start(ctx, "step/"+name,
+		oteltrace.WithAttributes(attribute.String("step.name", name)),
+	)
+	defer span.End()
+
+	stepCtx, cancel := context.WithTimeout(stepCtx, timeout)
+	defer cancel()
+
+	start := time.Now()
+	err := fn(stepCtx)
+	metrics.ProcessingStepDuration.WithLabelValues(name).Observe(time.Since(start).Seconds())
+
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+	}
+	return err
 }

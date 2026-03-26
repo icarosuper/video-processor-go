@@ -38,7 +38,7 @@ O pipeline FFmpeg funciona. A infraestrutura básica existe. Mas faltam as peça
 ## 🟡 Melhorias — Qualidade operacional
 
 ### Observabilidade
-- Tracing distribuído por job (OpenTelemetry) para ver tempo por etapa em produção
+- ✅ **OpenTelemetry**: tracing por job com span raiz `process_job` e spans filhos por etapa (`step/validate`, `step/transcode`, etc.); exporter OTLP via `OTEL_ENDPOINT`; no-op automático se não configurado
 
 ### Resiliência
 - ✅ **Circuit breaker**: MinIO abre após 5 falhas consecutivas (timeout 60s); Redis abre após 3 (timeout 30s); mudanças de estado logadas

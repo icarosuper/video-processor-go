@@ -20,6 +20,10 @@ type Config struct {
 	MinioRootUser     string `env:"MINIO_ROOT_USER,notEmpty"`
 	MinioRootPassword string `env:"MINIO_ROOT_PASSWORD,notEmpty"`
 	MinioBucketName   string `env:"MINIO_BUCKET_NAME,notEmpty"`
+	MinioUseSSL       bool   `env:"MINIO_USE_SSL" envDefault:"false"`
+
+	// HTTP
+	HTTPPort string `env:"HTTP_PORT" envDefault:"8080"`
 
 	// Webhook
 	WebhookSecret string `env:"WEBHOOK_SECRET"` // opcional: assina requisições com HMAC-SHA256

@@ -34,7 +34,7 @@ func main() {
 	initClients(cfg)
 
 	// Iniciar servidor HTTP com métricas e health check
-	startHTTPServer()
+	startHTTPServer(cfg.HTTPPort)
 
 	numWorkers := cfg.WorkerCount
 	if numWorkers == 0 {
@@ -121,15 +121,14 @@ func initClients(cfg *config.Config) {
 	minio.InitMinioClient(cfg)
 }
 
-func startHTTPServer() {
-	// Configurar rotas
+func startHTTPServer(port string) {
 	http.HandleFunc("/health", healthCheckHandler)
 	http.Handle("/metrics", promhttp.Handler())
 
-	// Iniciar servidor em goroutine
+	addr := ":" + port
 	go func() {
-		log.Info().Str("address", ":8080").Msg("Servidor HTTP iniciado")
-		if err := http.ListenAndServe(":8080", nil); err != nil {
+		log.Info().Str("address", addr).Msg("Servidor HTTP iniciado")
+		if err := http.ListenAndServe(addr, nil); err != nil {
 			log.Fatal().Err(err).Msg("Erro ao iniciar servidor HTTP")
 		}
 	}()

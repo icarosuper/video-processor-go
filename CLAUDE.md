@@ -21,7 +21,7 @@ internal/processor/processor-steps/*.go  # cada etapa do pipeline
 
 ## Estado atual (~95% pronto para produção)
 
-O pipeline FFmpeg funciona end-to-end com confiabilidade de jobs (retry, DLQ, recovery de órfãos), webhook de notificação, metadados persistidos, métricas operacionais reais, HLS adaptativo com múltiplas resoluções, circuit breakers para MinIO/Redis e timeouts individuais por etapa. Itens restantes: melhorias de configuração (SSL MinIO, porta HTTP) e observabilidade (OpenTelemetry).
+O pipeline FFmpeg funciona end-to-end com confiabilidade de jobs (retry, DLQ, recovery de órfãos), webhook de notificação, metadados persistidos, métricas operacionais reais, HLS adaptativo com múltiplas resoluções, circuit breakers para MinIO/Redis e timeouts individuais por etapa. Itens restantes: observabilidade avançada (OpenTelemetry) e escalabilidade.
 
 Ver `docs/roadmap.md` para o plano completo.
 

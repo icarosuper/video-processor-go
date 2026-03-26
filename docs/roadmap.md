@@ -45,9 +45,9 @@ O pipeline FFmpeg funciona. A infraestrutura básica existe. Mas faltam as peça
 - ✅ **Timeout por etapa**: cada etapa do pipeline tem seu próprio `context.WithTimeout` (validate/analyze 30s, transcode 3min, thumbnails/audio/preview 1-2min, streaming 4min)
 
 ### Configuração
-- **SSL MinIO**: `useSsl` hardcoded como `false`; expor via env var `MINIO_USE_SSL`
-- **Porta HTTP**: `:8080` hardcoded em `main.go`
-- **`go-redis/v8` → `v9`**: versão mais recente com melhor suporte a context
+- ✅ **SSL MinIO**: configurável via `MINIO_USE_SSL` (default `false`)
+- ✅ **Porta HTTP**: configurável via `HTTP_PORT` (default `8080`)
+- ✅ **`go-redis/v8` → `v9`**: migrado para `github.com/redis/go-redis/v9`
 
 ---
 

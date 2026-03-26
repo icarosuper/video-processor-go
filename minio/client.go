@@ -26,10 +26,7 @@ var (
 	cfg    *config.Config
 )
 
-const (
-	useSsl = false // TODO: Ver se precisa usar SSL
-	token  = ""    // TODO: Ver se precisa adicionar esse token
-)
+const token = "" // TODO: Ver se precisa adicionar esse token
 
 func InitMinioClient(config *config.Config) {
 	cfg = config
@@ -37,7 +34,7 @@ func InitMinioClient(config *config.Config) {
 	var err error
 	client, err = minio.New(cfg.MinioEndpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(cfg.MinioRootUser, cfg.MinioRootPassword, token),
-		Secure: useSsl,
+		Secure: cfg.MinioUseSSL,
 	})
 
 	if err != nil {

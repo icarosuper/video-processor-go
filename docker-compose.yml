@@ -28,9 +28,12 @@ services:
       - minio
     environment:
       REDIS_HOST: redis:6379
+      PROCESSING_REQUEST_QUEUE: video_queue
+      PROCESSING_FINISHED_QUEUE: video_success_queue
       MINIO_ENDPOINT: minio:9000
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_BUCKET_NAME: videos
     volumes:
       - ./tmp:/tmp
     # Se quiser rodar em modo interativo para debug, descomente:

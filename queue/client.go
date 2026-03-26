@@ -9,7 +9,6 @@ import (
 )
 
 var (
-	ctx    = context.Background()
 	client *redis.Client
 	cfg    *config.Config
 )
@@ -25,15 +24,15 @@ func InitRedisClient(configs *config.Config) {
 		Addr: cfg.RedisHost,
 	})
 
-	if err := client.Ping(ctx).Err(); err != nil {
+	if err := client.Ping(context.Background()).Err(); err != nil {
 		log.Fatal().Err(err).Msg("Erro ao conectar cliente Redis")
 	}
 	log.Info().Str("host", cfg.RedisHost).Msg("Cliente Redis conectado com sucesso")
 }
 
-func ConsumeMessage() (*Message, error) {
+// ConsumeMessage bloqueia até receber uma mensagem da fila ou o ctx ser cancelado.
+func ConsumeMessage(ctx context.Context) (*Message, error) {
 	result, err := client.BLPop(ctx, 0, cfg.ProcessingRequestQueue).Result()
-
 	if err != nil {
 		return nil, err
 	}
@@ -45,10 +44,10 @@ func ConsumeMessage() (*Message, error) {
 }
 
 func PublishSuccessMessage(videoID string) error {
-	return client.LPush(ctx, cfg.ProcessingFinishedQueue, videoID).Err()
+	return client.LPush(context.Background(), cfg.ProcessingFinishedQueue, videoID).Err()
 }
 
 // HealthCheck verifica se o cliente Redis está saudável
 func HealthCheck() error {
-	return client.Ping(ctx).Err()
+	return client.Ping(context.Background()).Err()
 }

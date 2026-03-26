@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"video-processor/config"
 
 	"github.com/minio/minio-go/v7"
@@ -116,6 +118,66 @@ func UploadVideo(srcPath string, videoType VideoType, objectID string) error {
 	}
 	log.Info().Str("object", objectPath).Str("bucket", cfg.MinioBucketName).Int64("size", fileInfo.Size()).Msg("Upload concluído")
 	return nil
+}
+
+// UploadFile faz upload de qualquer arquivo para um caminho específico no MinIO.
+func UploadFile(srcPath, objectPath string) error {
+	ctx := context.Background()
+	file, err := os.Open(srcPath)
+	if err != nil {
+		return fmt.Errorf("[minio] erro ao abrir arquivo para upload: %w", err)
+	}
+	defer file.Close()
+
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return fmt.Errorf("[minio] erro ao obter info do arquivo: %w", err)
+	}
+
+	_, err = client.PutObject(ctx, cfg.MinioBucketName, objectPath, file, fileInfo.Size(),
+		minio.PutObjectOptions{ContentType: contentTypeByExt(filepath.Ext(srcPath))})
+	if err != nil {
+		return fmt.Errorf("erro ao fazer upload de %s: %w", objectPath, err)
+	}
+	log.Info().Str("object", objectPath).Int64("size", fileInfo.Size()).Msg("Upload concluído")
+	return nil
+}
+
+// UploadDirectory faz upload de todos os arquivos (não-recursivo) de srcDir
+// para o MinIO com o prefixo objectPrefix.
+func UploadDirectory(srcDir, objectPrefix string) error {
+	entries, err := os.ReadDir(srcDir)
+	if err != nil {
+		return fmt.Errorf("[minio] erro ao ler diretório %s: %w", srcDir, err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		srcPath := filepath.Join(srcDir, entry.Name())
+		objectPath := objectPrefix + "/" + entry.Name()
+		if err := UploadFile(srcPath, objectPath); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func contentTypeByExt(ext string) string {
+	switch strings.ToLower(ext) {
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".mp3":
+		return "audio/mpeg"
+	case ".mp4":
+		return "video/mp4"
+	case ".ts":
+		return "video/MP2T"
+	case ".m3u8":
+		return "application/x-mpegURL"
+	default:
+		return "application/octet-stream"
+	}
 }
 
 // HealthCheck verifica se o cliente MinIO está saudável

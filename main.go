@@ -138,37 +138,31 @@ func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func processNextMessage(ctx context.Context, workerID int) error {
-	// Timeout para processar cada mensagem (5 minutos)
+	// Bloqueia até receber mensagem ou ctx ser cancelado (shutdown)
+	msg, err := queue.ConsumeMessage(ctx)
+	if err != nil {
+		return err
+	}
+	if msg == nil {
+		return nil
+	}
+
+	videoID := msg.VideoID
+	log.Info().Int("workerID", workerID).Str("videoID", videoID).Msg("Processando vídeo")
+
 	processCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
-	// Canal para controle da operação
 	done := make(chan error, 1)
 
 	go func() {
-		msg, err := queue.ConsumeMessage()
-		if err != nil {
-			done <- fmt.Errorf("erro ao consumir mensagem: %v", err)
-			return
-		}
-		if msg == nil {
-			done <- nil
-			return
-		}
-
-		videoID := msg.VideoID
-		log.Info().Int("workerID", workerID).Str("videoID", videoID).Msg("Processando vídeo")
-
-		// Medir tempo de processamento
 		startTime := time.Now()
 
-		// Usa os.TempDir() para compatibilidade com Windows
 		inputPath := filepath.Join(os.TempDir(), videoID+"_input.mp4")
 		outputPath := filepath.Join(os.TempDir(), videoID+"_output.mp4")
 
-		// Limpeza dos arquivos temporários ao finalizar
 		defer func() {
-			os.Remove(inputPath) // todo: Handle these
+			os.Remove(inputPath)
 			os.Remove(outputPath)
 		}()
 
@@ -178,7 +172,11 @@ func processNextMessage(ctx context.Context, workerID int) error {
 			return
 		}
 
-		if err := processor.ProcessVideo(inputPath, outputPath); err != nil {
+		result, err := processor.ProcessVideo(inputPath, outputPath)
+		if result != nil {
+			defer os.RemoveAll(result.TempDir)
+		}
+		if err != nil {
 			metrics.VideosProcessedTotal.WithLabelValues("error").Inc()
 			done <- fmt.Errorf("erro ao processar vídeo: %v", err)
 			return
@@ -191,13 +189,34 @@ func processNextMessage(ctx context.Context, workerID int) error {
 			return
 		}
 
+		// Upload dos artefatos opcionais gerados pelo pipeline
+		if result.ThumbnailsDir != "" {
+			if err := minio.UploadDirectory(result.ThumbnailsDir, "thumbnails/"+videoID); err != nil {
+				log.Warn().Err(err).Str("videoID", videoID).Msg("Falha ao fazer upload dos thumbnails")
+			}
+		}
+		if result.AudioPath != "" {
+			if err := minio.UploadFile(result.AudioPath, "audio/"+videoID+".mp3"); err != nil {
+				log.Warn().Err(err).Str("videoID", videoID).Msg("Falha ao fazer upload do áudio")
+			}
+		}
+		if result.PreviewPath != "" {
+			if err := minio.UploadFile(result.PreviewPath, "preview/"+videoID+"_preview.mp4"); err != nil {
+				log.Warn().Err(err).Str("videoID", videoID).Msg("Falha ao fazer upload do preview")
+			}
+		}
+		if result.StreamingDir != "" {
+			if err := minio.UploadDirectory(result.StreamingDir, "hls/"+videoID); err != nil {
+				log.Warn().Err(err).Str("videoID", videoID).Msg("Falha ao fazer upload dos segmentos HLS")
+			}
+		}
+
 		if err := queue.PublishSuccessMessage(processedID); err != nil {
 			metrics.VideosProcessedTotal.WithLabelValues("error").Inc()
 			done <- fmt.Errorf("erro ao publicar mensagem de sucesso: %v", err)
 			return
 		}
 
-		// Registrar métricas de sucesso
 		duration := time.Since(startTime).Seconds()
 		metrics.ProcessingDuration.Observe(duration)
 		metrics.VideosProcessedTotal.WithLabelValues("success").Inc()
@@ -206,7 +225,6 @@ func processNextMessage(ctx context.Context, workerID int) error {
 		done <- nil
 	}()
 
-	// Aguarda a conclusão ou cancelamento
 	select {
 	case err := <-done:
 		return err

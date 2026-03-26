@@ -12,33 +12,43 @@ import (
 	"video-processor/metrics"
 )
 
+// ProcessingResult contém os caminhos dos artefatos gerados pelo pipeline.
+// TempDir deve ser removido pelo chamador após os uploads.
+type ProcessingResult struct {
+	TempDir       string
+	ThumbnailsDir string // vazio se a etapa falhou
+	AudioPath     string
+	PreviewPath   string
+	StreamingDir  string
+}
+
 // ProcessVideo executa todas as etapas do pipeline de processamento de vídeo.
-func ProcessVideo(inputPath, outputPath string) error {
-	// Criar diretório de output temporário para os arquivos gerados
+// Retorna ProcessingResult mesmo em caso de erro, para que o chamador possa limpar TempDir.
+func ProcessVideo(inputPath, outputPath string) (*ProcessingResult, error) {
 	baseDir := filepath.Dir(outputPath)
 	videoBaseName := filepath.Base(inputPath)
 	videoBaseName = videoBaseName[:len(videoBaseName)-len(filepath.Ext(videoBaseName))]
 
 	tempDir := filepath.Join(baseDir, videoBaseName+"_temp")
 	if err := os.MkdirAll(tempDir, 0755); err != nil {
-		return fmt.Errorf("erro ao criar diretório temporário: %w", err)
+		return nil, fmt.Errorf("erro ao criar diretório temporário: %w", err)
 	}
-	defer os.RemoveAll(tempDir) // Limpar diretório temporário ao finalizar
+
+	result := &ProcessingResult{TempDir: tempDir}
 
 	// 1. Validação
 	log.Info().Msg("Etapa 1/7: Validando vídeo")
 	start := time.Now()
 	if err := processor_steps.ValidateVideo(inputPath); err != nil {
-		return fmt.Errorf("validação falhou: %w", err)
+		return result, fmt.Errorf("validação falhou: %w", err)
 	}
 	metrics.ProcessingStepDuration.WithLabelValues("validate").Observe(time.Since(start).Seconds())
 
-	// 2. Análise de conteúdo (antes de transcodificar para obter metadados originais)
+	// 2. Análise de conteúdo
 	log.Info().Msg("Etapa 2/7: Analisando conteúdo")
 	start = time.Now()
 	if err := processor_steps.AnalyzeContent(inputPath); err != nil {
 		log.Warn().Err(err).Msg("Falha na análise de conteúdo")
-		// Não retorna erro - análise é informativa
 	}
 	metrics.ProcessingStepDuration.WithLabelValues("analyze").Observe(time.Since(start).Seconds())
 
@@ -46,11 +56,10 @@ func ProcessVideo(inputPath, outputPath string) error {
 	log.Info().Msg("Etapa 3/7: Transcodificando vídeo")
 	start = time.Now()
 	if err := processor_steps.TranscodeVideo(inputPath, outputPath); err != nil {
-		return fmt.Errorf("transcodificação falhou: %w", err)
+		return result, fmt.Errorf("transcodificação falhou: %w", err)
 	}
 	metrics.ProcessingStepDuration.WithLabelValues("transcode").Observe(time.Since(start).Seconds())
 
-	// As próximas etapas usam o vídeo transcodificado
 	transcodedPath := outputPath
 
 	// 4. Geração de thumbnails
@@ -59,7 +68,8 @@ func ProcessVideo(inputPath, outputPath string) error {
 	thumbnailsDir := filepath.Join(tempDir, "thumbnails")
 	if err := processor_steps.GenerateThumbnails(transcodedPath, thumbnailsDir); err != nil {
 		log.Warn().Err(err).Msg("Falha ao gerar thumbnails")
-		// Não retorna erro - thumbnails são opcionais
+	} else {
+		result.ThumbnailsDir = thumbnailsDir
 	}
 	metrics.ProcessingStepDuration.WithLabelValues("thumbnails").Observe(time.Since(start).Seconds())
 
@@ -69,7 +79,8 @@ func ProcessVideo(inputPath, outputPath string) error {
 	audioPath := filepath.Join(tempDir, "audio.mp3")
 	if err := processor_steps.ExtractAudio(transcodedPath, audioPath); err != nil {
 		log.Warn().Err(err).Msg("Falha na extração de áudio")
-		// Não retorna erro - áudio separado é opcional
+	} else {
+		result.AudioPath = audioPath
 	}
 	metrics.ProcessingStepDuration.WithLabelValues("audio").Observe(time.Since(start).Seconds())
 
@@ -79,7 +90,8 @@ func ProcessVideo(inputPath, outputPath string) error {
 	previewPath := filepath.Join(tempDir, "preview.mp4")
 	if err := processor_steps.GeneratePreview(transcodedPath, previewPath); err != nil {
 		log.Warn().Err(err).Msg("Falha na geração de preview")
-		// Não retorna erro - preview é opcional
+	} else {
+		result.PreviewPath = previewPath
 	}
 	metrics.ProcessingStepDuration.WithLabelValues("preview").Observe(time.Since(start).Seconds())
 
@@ -89,10 +101,11 @@ func ProcessVideo(inputPath, outputPath string) error {
 	streamingDir := filepath.Join(tempDir, "streaming")
 	if err := processor_steps.SegmentForStreaming(transcodedPath, streamingDir); err != nil {
 		log.Warn().Err(err).Msg("Falha na segmentação para streaming")
-		// Não retorna erro - streaming é opcional
+	} else {
+		result.StreamingDir = streamingDir
 	}
 	metrics.ProcessingStepDuration.WithLabelValues("streaming").Observe(time.Since(start).Seconds())
 
 	log.Info().Msg("Pipeline de processamento concluído com sucesso")
-	return nil
+	return result, nil
 }

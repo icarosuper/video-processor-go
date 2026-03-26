@@ -12,15 +12,16 @@ config/config.go                 # env vars via caarlos0/env
 queue/client.go                  # Redis BRPopLPush (consumo atômico) + recovery de órfãos
 queue/job.go                     # estado do job (pending→processing→done/failed), retry, DLQ
 internal/webhook/webhook.go      # notificação POST ao callbackURL com retry e HMAC opcional
+internal/circuitbreaker/circuitbreaker.go  # circuit breakers para MinIO e Redis
 minio/client.go                  # download/upload de vídeos e artefatos
 metrics/metrics.go               # métricas Prometheus (promauto)
 internal/processor/processor.go  # orquestrador das 7 etapas, retorna ProcessingResult
 internal/processor/processor-steps/*.go  # cada etapa do pipeline
 ```
 
-## Estado atual (~85% pronto para produção)
+## Estado atual (~95% pronto para produção)
 
-O pipeline FFmpeg funciona end-to-end com confiabilidade de jobs (retry, DLQ, recovery de órfãos), webhook de notificação, metadados persistidos, métricas operacionais reais e HLS adaptativo com múltiplas resoluções. Principais itens restantes: melhorias operacionais (circuit breaker, timeout por etapa, SSL MinIO).
+O pipeline FFmpeg funciona end-to-end com confiabilidade de jobs (retry, DLQ, recovery de órfãos), webhook de notificação, metadados persistidos, métricas operacionais reais, HLS adaptativo com múltiplas resoluções, circuit breakers para MinIO/Redis e timeouts individuais por etapa. Itens restantes: melhorias de configuração (SSL MinIO, porta HTTP) e observabilidade (OpenTelemetry).
 
 Ver `docs/roadmap.md` para o plano completo.
 

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"video-processor/config"
+	"video-processor/internal/circuitbreaker"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -64,10 +65,16 @@ func getObjectPath(videoType VideoType, objectID string) string {
 }
 
 func DownloadVideo(videoType VideoType, objectID, destPath string) error {
+	_, err := circuitbreaker.MinIO.Execute(func() (interface{}, error) {
+		return nil, downloadVideo(videoType, objectID, destPath)
+	})
+	return err
+}
+
+func downloadVideo(videoType VideoType, objectID, destPath string) error {
 	ctx := context.Background()
 	objectPath := getObjectPath(videoType, objectID)
 
-	// Verifica se o objeto existe e valida o tamanho antes de baixar
 	info, err := client.StatObject(ctx, cfg.MinioBucketName, objectPath, minio.StatObjectOptions{})
 	if err != nil {
 		log.Error().Err(err).Str("object", objectPath).Msg("Objeto não encontrado")
@@ -102,6 +109,13 @@ func DownloadVideo(videoType VideoType, objectID, destPath string) error {
 }
 
 func UploadVideo(srcPath string, videoType VideoType, objectID string) error {
+	_, err := circuitbreaker.MinIO.Execute(func() (interface{}, error) {
+		return nil, uploadVideo(srcPath, videoType, objectID)
+	})
+	return err
+}
+
+func uploadVideo(srcPath string, videoType VideoType, objectID string) error {
 	ctx := context.Background()
 	file, err := os.Open(srcPath)
 	if err != nil {
@@ -125,6 +139,13 @@ func UploadVideo(srcPath string, videoType VideoType, objectID string) error {
 
 // UploadFile faz upload de qualquer arquivo para um caminho específico no MinIO.
 func UploadFile(srcPath, objectPath string) error {
+	_, err := circuitbreaker.MinIO.Execute(func() (interface{}, error) {
+		return nil, uploadFile(srcPath, objectPath)
+	})
+	return err
+}
+
+func uploadFile(srcPath, objectPath string) error {
 	ctx := context.Background()
 	file, err := os.Open(srcPath)
 	if err != nil {

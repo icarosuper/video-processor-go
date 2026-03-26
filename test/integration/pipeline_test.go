@@ -107,7 +107,7 @@ func TestPipeline_ValidateStep(t *testing.T) {
 	}
 
 	// Run validation step
-	err = processor_steps.ValidateVideo(localPath)
+	err = processor_steps.ValidateVideo(ctx, localPath)
 	if err != nil {
 		t.Errorf("ValidateVideo failed: %v", err)
 	}
@@ -154,7 +154,7 @@ func TestPipeline_TranscodeStep(t *testing.T) {
 	obj.Close()
 
 	// Run transcode step
-	err = processor_steps.TranscodeVideo(inputPath, outputPath)
+	err = processor_steps.TranscodeVideo(ctx, inputPath, outputPath)
 	if err != nil {
 		t.Fatalf("TranscodeVideo failed: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestPipeline_TranscodeStep(t *testing.T) {
 		t.Error("Output file was not created")
 	}
 
-	err = processor_steps.ValidateVideo(outputPath)
+	err = processor_steps.ValidateVideo(ctx, outputPath)
 	if err != nil {
 		t.Errorf("Transcoded video is invalid: %v", err)
 	}
@@ -257,15 +257,15 @@ func TestPipeline_FullWorkflow(t *testing.T) {
 	obj.Close()
 
 	// Step 4: Process video (validate, transcode, analyze)
-	if err := processor_steps.ValidateVideo(inputPath); err != nil {
+	if err := processor_steps.ValidateVideo(ctx, inputPath); err != nil {
 		t.Fatalf("Validation failed: %v", err)
 	}
 
-	if _, err := processor_steps.AnalyzeContent(inputPath); err != nil {
+	if _, err := processor_steps.AnalyzeContent(ctx, inputPath); err != nil {
 		t.Logf("Analysis warning: %v", err) // Non-critical
 	}
 
-	if err := processor_steps.TranscodeVideo(inputPath, outputPath); err != nil {
+	if err := processor_steps.TranscodeVideo(ctx, inputPath, outputPath); err != nil {
 		t.Fatalf("Transcode failed: %v", err)
 	}
 
@@ -339,7 +339,7 @@ func TestPipeline_ThumbnailGeneration(t *testing.T) {
 	obj.Close()
 
 	// Generate thumbnails
-	err := processor_steps.GenerateThumbnails(inputPath, thumbDir)
+	err := processor_steps.GenerateThumbnails(ctx, inputPath, thumbDir)
 	if err != nil {
 		t.Fatalf("GenerateThumbnails failed: %v", err)
 	}

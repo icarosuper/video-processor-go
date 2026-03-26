@@ -1,22 +1,22 @@
 package processor_steps
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 )
 
 // TranscodeVideo converte o vídeo para formatos padronizados (MP4, H.264, AAC).
-func TranscodeVideo(inputPath, outputPath string) error {
-	// Converter para MP4 com H.264 video e AAC audio
-	cmd := exec.Command("ffmpeg",
+func TranscodeVideo(ctx context.Context, inputPath, outputPath string) error {
+	cmd := exec.CommandContext(ctx, "ffmpeg",
 		"-i", inputPath,
-		"-c:v", "libx264", // Codec de vídeo H.264
-		"-preset", "medium", // Balance entre velocidade e compressão
-		"-crf", "23", // Qualidade (lower = better, 18-28 é bom)
-		"-c:a", "aac", // Codec de áudio
-		"-b:a", "128k", // Bitrate de áudio
-		"-movflags", "+faststart", // Otimização para streaming
-		"-y", // Sobrescrever arquivo de saída
+		"-c:v", "libx264",
+		"-preset", "medium",
+		"-crf", "23",
+		"-c:a", "aac",
+		"-b:a", "128k",
+		"-movflags", "+faststart",
+		"-y",
 		outputPath,
 	)
 

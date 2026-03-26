@@ -1,6 +1,7 @@
 package processor_steps
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,7 +11,7 @@ func TestExtractAudio_ValidVideo(t *testing.T) {
 	inputPath := GenerateTestVideo(t, 5)
 	outputPath := filepath.Join(t.TempDir(), "audio.mp3")
 
-	if err := ExtractAudio(inputPath, outputPath); err != nil {
+	if err := ExtractAudio(context.Background(), inputPath, outputPath); err != nil {
 		t.Fatalf("ExtractAudio() falhou: %v", err)
 	}
 
@@ -27,7 +28,7 @@ func TestExtractAudio_InvalidVideo(t *testing.T) {
 	invalidPath := CreateInvalidFile(t)
 	outputPath := filepath.Join(t.TempDir(), "audio.mp3")
 
-	if err := ExtractAudio(invalidPath, outputPath); err == nil {
+	if err := ExtractAudio(context.Background(), invalidPath, outputPath); err == nil {
 		t.Error("ExtractAudio() deveria falhar com entrada inválida")
 	}
 }
@@ -35,7 +36,7 @@ func TestExtractAudio_InvalidVideo(t *testing.T) {
 func TestExtractAudio_NonExistentVideo(t *testing.T) {
 	outputPath := filepath.Join(t.TempDir(), "audio.mp3")
 
-	if err := ExtractAudio("/caminho/que/nao/existe.mp4", outputPath); err == nil {
+	if err := ExtractAudio(context.Background(), "/caminho/que/nao/existe.mp4", outputPath); err == nil {
 		t.Error("ExtractAudio() deveria falhar com arquivo inexistente")
 	}
 }

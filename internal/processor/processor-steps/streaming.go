@@ -1,6 +1,7 @@
 package processor_steps
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -35,15 +36,13 @@ var hlsVariants = []hlsVariant{
 //	{resolução}/
 //	  playlist.m3u8      — playlist de cada variante
 //	  seg_000.ts, ...    — segmentos de vídeo
-func SegmentForStreaming(inputPath, outputDir string) error {
+func SegmentForStreaming(ctx context.Context, inputPath, outputDir string) error {
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		return fmt.Errorf("falha ao criar diretório: %w", err)
 	}
 
-	sourceHeight := probeSourceHeight(inputPath)
+	sourceHeight := probeSourceHeight(ctx, inputPath)
 
-	// Filtra variantes que não excedem a resolução original.
-	// Se nenhuma se encaixar (vídeo muito pequeno), usa a menor.
 	var selected []hlsVariant
 	for _, v := range hlsVariants {
 		if sourceHeight == 0 || v.Height <= sourceHeight {
@@ -59,7 +58,7 @@ func SegmentForStreaming(inputPath, outputDir string) error {
 		if err := os.MkdirAll(varDir, 0755); err != nil {
 			return fmt.Errorf("falha ao criar diretório %s: %w", v.Name, err)
 		}
-		if err := transcodeHLSVariant(inputPath, varDir, v); err != nil {
+		if err := transcodeHLSVariant(ctx, inputPath, varDir, v); err != nil {
 			return err
 		}
 	}
@@ -67,12 +66,11 @@ func SegmentForStreaming(inputPath, outputDir string) error {
 	return writeMasterPlaylist(outputDir, selected)
 }
 
-// transcodeHLSVariant transcodifica e segmenta o vídeo para uma resolução específica.
-func transcodeHLSVariant(inputPath, varDir string, v hlsVariant) error {
+func transcodeHLSVariant(ctx context.Context, inputPath, varDir string, v hlsVariant) error {
 	playlistPath := filepath.Join(varDir, "playlist.m3u8")
 	segmentPath := filepath.Join(varDir, "seg_%03d.ts")
 
-	cmd := exec.Command("ffmpeg",
+	cmd := exec.CommandContext(ctx, "ffmpeg",
 		"-i", inputPath,
 		"-c:v", "libx264",
 		"-preset", "fast",
@@ -95,7 +93,6 @@ func transcodeHLSVariant(inputPath, varDir string, v hlsVariant) error {
 	return nil
 }
 
-// writeMasterPlaylist gera o arquivo master.m3u8 referenciando todas as variantes.
 func writeMasterPlaylist(outputDir string, variants []hlsVariant) error {
 	var sb strings.Builder
 	sb.WriteString("#EXTM3U\n#EXT-X-VERSION:3\n\n")
@@ -106,9 +103,8 @@ func writeMasterPlaylist(outputDir string, variants []hlsVariant) error {
 	return os.WriteFile(masterPath, []byte(sb.String()), 0644)
 }
 
-// probeSourceHeight retorna a altura do vídeo usando ffprobe. Retorna 0 em caso de erro.
-func probeSourceHeight(inputPath string) int {
-	cmd := exec.Command("ffprobe",
+func probeSourceHeight(ctx context.Context, inputPath string) int {
+	cmd := exec.CommandContext(ctx, "ffprobe",
 		"-v", "quiet",
 		"-select_streams", "v:0",
 		"-show_entries", "stream=height",

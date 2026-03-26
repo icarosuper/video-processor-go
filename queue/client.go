@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 	"video-processor/config"
+	"video-processor/internal/circuitbreaker"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/rs/zerolog/log"
@@ -40,29 +41,38 @@ func deadLetterQueueName() string {
 }
 
 // ConsumeMessage bloqueia até receber uma mensagem da fila ou o ctx ser cancelado.
-// Usa BRPOPLPUSH para mover o job atomicamente para a fila de processamento,
-// garantindo que o job não seja perdido em caso de crash do worker.
+// Usa BRPOPLPUSH para mover o job atomicamente para a fila de processamento.
 func ConsumeMessage(ctx context.Context) (*Message, error) {
-	videoID, err := client.BRPopLPush(ctx, cfg.ProcessingRequestQueue, processingQueueName(), 0).Result()
+	result, err := circuitbreaker.Redis.Execute(func() (interface{}, error) {
+		videoID, err := client.BRPopLPush(ctx, cfg.ProcessingRequestQueue, processingQueueName(), 0).Result()
+		if err != nil {
+			return nil, err
+		}
+		return &Message{VideoID: videoID}, nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	return &Message{VideoID: videoID}, nil
+	return result.(*Message), nil
 }
 
 // AcknowledgeMessage remove o job da fila de processamento após conclusão (sucesso ou falha).
-// Deve sempre ser chamado ao fim do processamento para não deixar jobs órfãos.
 func AcknowledgeMessage(videoID string) error {
-	return client.LRem(context.Background(), processingQueueName(), 1, videoID).Err()
+	_, err := circuitbreaker.Redis.Execute(func() (interface{}, error) {
+		return nil, client.LRem(context.Background(), processingQueueName(), 1, videoID).Err()
+	})
+	return err
 }
 
 func PublishSuccessMessage(videoID string) error {
-	return client.LPush(context.Background(), cfg.ProcessingFinishedQueue, videoID).Err()
+	_, err := circuitbreaker.Redis.Execute(func() (interface{}, error) {
+		return nil, client.LPush(context.Background(), cfg.ProcessingFinishedQueue, videoID).Err()
+	})
+	return err
 }
 
 // StartRecovery inicia uma goroutine que periodicamente verifica a fila de
 // processamento e recoloca na fila principal jobs que ficaram presos (crash do worker).
-// stuckTimeout define quanto tempo em processing antes de ser considerado órfão.
 func StartRecovery(ctx context.Context, stuckTimeout time.Duration) {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()

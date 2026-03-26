@@ -1,6 +1,7 @@
 package processor_steps
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os/exec"
@@ -23,8 +24,8 @@ type VideoMetadata struct {
 }
 
 // AnalyzeContent extrai metadados e informações técnicas do vídeo.
-func AnalyzeContent(inputPath string) (*VideoMetadata, error) {
-	cmd := exec.Command("ffprobe",
+func AnalyzeContent(ctx context.Context, inputPath string) (*VideoMetadata, error) {
+	cmd := exec.CommandContext(ctx, "ffprobe",
 		"-v", "quiet",
 		"-print_format", "json",
 		"-show_format",
@@ -37,7 +38,6 @@ func AnalyzeContent(inputPath string) (*VideoMetadata, error) {
 		return nil, fmt.Errorf("falha na análise: %w", err)
 	}
 
-	// Parse JSON output
 	var probeData struct {
 		Format struct {
 			Duration string `json:"duration"`
@@ -57,7 +57,6 @@ func AnalyzeContent(inputPath string) (*VideoMetadata, error) {
 		return nil, fmt.Errorf("falha ao parsear JSON: %w", err)
 	}
 
-	// Extrair metadados
 	metadata := &VideoMetadata{}
 
 	for _, stream := range probeData.Streams {
@@ -66,7 +65,6 @@ func AnalyzeContent(inputPath string) (*VideoMetadata, error) {
 			metadata.Height = stream.Height
 			metadata.VideoCodec = stream.CodecName
 
-			// Parse FPS (format: "30000/1001")
 			if parts := strings.Split(stream.RFrameRate, "/"); len(parts) == 2 {
 				numerator, _ := strconv.ParseFloat(parts[0], 64)
 				denominator, _ := strconv.ParseFloat(parts[1], 64)
@@ -79,12 +77,10 @@ func AnalyzeContent(inputPath string) (*VideoMetadata, error) {
 		}
 	}
 
-	// Parse duration, size, bitrate
 	metadata.Duration, _ = strconv.ParseFloat(probeData.Format.Duration, 64)
 	metadata.Size, _ = strconv.ParseInt(probeData.Format.Size, 10, 64)
 	metadata.Bitrate, _ = strconv.ParseInt(probeData.Format.BitRate, 10, 64)
 
-	// Log metadados para debug
 	log.Info().
 		Float64("duration", metadata.Duration).
 		Int("width", metadata.Width).

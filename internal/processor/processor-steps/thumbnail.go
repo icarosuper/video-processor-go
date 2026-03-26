@@ -1,6 +1,7 @@
 package processor_steps
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,27 +12,20 @@ import (
 
 // ThumbnailConfig define as configurações para geração de thumbnails.
 type ThumbnailConfig struct {
-	Count  int // Número de thumbnails (ex: 5)
-	Width  int // Largura em pixels (ex: 320)
-	Height int // Altura em pixels (ex: 180)
+	Count  int
+	Width  int
+	Height int
 }
 
 // GenerateThumbnails gera thumbnails do vídeo em múltiplos timestamps.
-func GenerateThumbnails(inputPath, outputDir string) error {
-	// Configuração padrão
-	config := ThumbnailConfig{
-		Count:  5,
-		Width:  320,
-		Height: 180,
-	}
+func GenerateThumbnails(ctx context.Context, inputPath, outputDir string) error {
+	config := ThumbnailConfig{Count: 5, Width: 320, Height: 180}
 
-	// Criar diretório de saída se não existir
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		return fmt.Errorf("falha ao criar diretório de thumbnails: %w", err)
 	}
 
-	// Obter duração do vídeo
-	durationCmd := exec.Command("ffprobe",
+	durationCmd := exec.CommandContext(ctx, "ffprobe",
 		"-v", "error",
 		"-show_entries", "format=duration",
 		"-of", "default=noprint_wrappers=1:nokey=1",
@@ -48,19 +42,18 @@ func GenerateThumbnails(inputPath, outputDir string) error {
 		return fmt.Errorf("duração inválida: %w", err)
 	}
 
-	// Gerar thumbnails em intervalos regulares
 	interval := duration / float64(config.Count+1)
 
 	for i := 1; i <= config.Count; i++ {
 		timestamp := interval * float64(i)
 		thumbnailPath := filepath.Join(outputDir, fmt.Sprintf("thumb_%03d.jpg", i))
 
-		cmd := exec.Command("ffmpeg",
-			"-ss", strconv.FormatFloat(timestamp, 'f', 2, 64), // Timestamp
+		cmd := exec.CommandContext(ctx, "ffmpeg",
+			"-ss", strconv.FormatFloat(timestamp, 'f', 2, 64),
 			"-i", inputPath,
-			"-vframes", "1", // Um único frame
+			"-vframes", "1",
 			"-vf", fmt.Sprintf("scale=%d:%d", config.Width, config.Height),
-			"-y", // Sobrescrever
+			"-y",
 			thumbnailPath,
 		)
 

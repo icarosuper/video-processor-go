@@ -1,18 +1,19 @@
 package processor_steps
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 )
 
 // ExtractAudio extrai a faixa de áudio do vídeo em formato MP3.
-func ExtractAudio(inputPath, outputPath string) error {
-	cmd := exec.Command("ffmpeg",
+func ExtractAudio(ctx context.Context, inputPath, outputPath string) error {
+	cmd := exec.CommandContext(ctx, "ffmpeg",
 		"-i", inputPath,
-		"-vn",                   // No video
-		"-acodec", "libmp3lame", // Codec MP3
-		"-ab", "192k", // Bitrate de áudio
-		"-y", // Sobrescrever
+		"-vn",
+		"-acodec", "libmp3lame",
+		"-ab", "192k",
+		"-y",
 		outputPath,
 	)
 

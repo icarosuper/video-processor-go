@@ -1,13 +1,14 @@
 package processor_steps
 
 import (
+	"context"
 	"testing"
 )
 
 func TestAnalyzeContent_ValidVideo(t *testing.T) {
 	videoPath := GenerateTestVideo(t, 5)
 
-	metadata, err := AnalyzeContent(videoPath)
+	metadata, err := AnalyzeContent(context.Background(), videoPath)
 	if err != nil {
 		t.Fatalf("AnalyzeContent() falhou: %v", err)
 	}
@@ -28,7 +29,7 @@ func TestAnalyzeContent_ValidVideo(t *testing.T) {
 func TestAnalyzeContent_InvalidVideo(t *testing.T) {
 	invalidPath := CreateInvalidFile(t)
 
-	metadata, err := AnalyzeContent(invalidPath)
+	metadata, err := AnalyzeContent(context.Background(), invalidPath)
 	if err == nil {
 		t.Error("AnalyzeContent() deveria falhar com vídeo inválido")
 	}
@@ -38,7 +39,7 @@ func TestAnalyzeContent_InvalidVideo(t *testing.T) {
 }
 
 func TestAnalyzeContent_NonExistentVideo(t *testing.T) {
-	metadata, err := AnalyzeContent("/caminho/que/nao/existe.mp4")
+	metadata, err := AnalyzeContent(context.Background(), "/caminho/que/nao/existe.mp4")
 	if err == nil {
 		t.Error("AnalyzeContent() deveria falhar com arquivo inexistente")
 	}

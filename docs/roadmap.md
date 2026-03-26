@@ -4,7 +4,7 @@
 
 Worker assíncrono que uma API chama para processar vídeos enviados por usuários (modelo YouTube): recebe um `videoID`, processa em pipeline de 7 etapas com FFmpeg, e entrega os artefatos no MinIO.
 
-## Status Atual: ~85% pronto para produção
+## Status Atual: ~95% pronto para produção
 
 O pipeline FFmpeg funciona. A infraestrutura básica existe. Mas faltam as peças que tornam o sistema **confiável e integrável** com uma API real.
 
@@ -41,8 +41,8 @@ O pipeline FFmpeg funciona. A infraestrutura básica existe. Mas faltam as peça
 - Tracing distribuído por job (OpenTelemetry) para ver tempo por etapa em produção
 
 ### Resiliência
-- **Circuit breaker**: proteger chamadas ao MinIO e Redis de falhas em cascata
-- **Timeout por etapa**: hoje o timeout de 5 minutos é global; etapas críticas deveriam ter limites individuais
+- ✅ **Circuit breaker**: MinIO abre após 5 falhas consecutivas (timeout 60s); Redis abre após 3 (timeout 30s); mudanças de estado logadas
+- ✅ **Timeout por etapa**: cada etapa do pipeline tem seu próprio `context.WithTimeout` (validate/analyze 30s, transcode 3min, thumbnails/audio/preview 1-2min, streaming 4min)
 
 ### Configuração
 - **SSL MinIO**: `useSsl` hardcoded como `false`; expor via env var `MINIO_USE_SSL`

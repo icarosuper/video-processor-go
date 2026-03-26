@@ -233,7 +233,7 @@ func processNextMessage(ctx context.Context, workerID int, cfg *config.Config) e
 			metrics.VideoSizeBytes.Observe(float64(info.Size()))
 		}
 
-		result, err := processor.ProcessVideo(inputPath, outputPath)
+		result, err := processor.ProcessVideo(processCtx, inputPath, outputPath)
 		if result != nil {
 			defer os.RemoveAll(result.TempDir)
 		}

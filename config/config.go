@@ -33,10 +33,10 @@ type Config struct {
 	WebhookSecret string `env:"WEBHOOK_SECRET"` // opcional: assina requisições com HMAC-SHA256
 
 	// Workers
-	WorkerCount int `env:"WORKER_COUNT" default:"0"`
+	WorkerCount int `env:"WORKER_COUNT" envDefault:"0"`
 
 	// Processamento
-	MaxFileSizeMB int64 `env:"MAX_FILE_SIZE_MB" default:"5120"` // 5 GB
+	MaxFileSizeMB int64 `env:"MAX_FILE_SIZE_MB" envDefault:"5120"` // 5 GB
 }
 
 func LoadConfig() *Config {

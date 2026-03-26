@@ -11,19 +11,18 @@ main.go                          # worker pool + graceful shutdown + HTTP server
 config/config.go                 # env vars via caarlos0/env
 queue/client.go                  # Redis BRPopLPush (consumo atômico) + recovery de órfãos
 queue/job.go                     # estado do job (pending→processing→done/failed), retry, DLQ
+internal/webhook/webhook.go      # notificação POST ao callbackURL com retry e HMAC opcional
 minio/client.go                  # download/upload de vídeos e artefatos
 metrics/metrics.go               # métricas Prometheus (promauto)
 internal/processor/processor.go  # orquestrador das 7 etapas, retorna ProcessingResult
 internal/processor/processor-steps/*.go  # cada etapa do pipeline
 ```
 
-## Estado atual (~55% pronto para produção)
+## Estado atual (~70% pronto para produção)
 
-O pipeline FFmpeg funciona end-to-end com confiabilidade de jobs (retry, DLQ, recovery de órfãos), metadados persistidos e métricas operacionais reais. Os bloqueadores restantes para uso em produção são:
+O pipeline FFmpeg funciona end-to-end com confiabilidade de jobs (retry, DLQ, recovery de órfãos), webhook de notificação, metadados persistidos e métricas operacionais reais. O principal bloqueador restante para uso em produção é:
 
-1. **Sem notificação push** — a API precisa de polling em `queue.GetJobState(videoID)`. Falta webhook/callback (C3).
-
-2. **Resolução única** — gera um MP4 só. Streaming adaptativo real precisa de 360p/480p/720p/1080p (P1).
+1. **Resolução única** — gera um MP4 só. Streaming adaptativo real precisa de 360p/480p/720p/1080p (P1).
 
 Ver `docs/roadmap.md` para o plano completo.
 

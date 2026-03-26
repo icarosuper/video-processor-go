@@ -21,6 +21,9 @@ type Config struct {
 	MinioRootPassword string `env:"MINIO_ROOT_PASSWORD,notEmpty"`
 	MinioBucketName   string `env:"MINIO_BUCKET_NAME,notEmpty"`
 
+	// Webhook
+	WebhookSecret string `env:"WEBHOOK_SECRET"` // opcional: assina requisições com HMAC-SHA256
+
 	// Workers
 	WorkerCount int `env:"WORKER_COUNT" default:"0"`
 

@@ -45,13 +45,14 @@ type JobArtifacts struct {
 
 // JobState representa o estado completo de um job de processamento.
 type JobState struct {
-	Status     JobStatus      `json:"status"`
-	Error      string         `json:"error,omitempty"`
-	Artifacts  *JobArtifacts  `json:"artifacts,omitempty"`
-	Metadata   *VideoMetadata `json:"metadata,omitempty"`
-	RetryCount int            `json:"retry_count"`
-	CreatedAt  int64          `json:"created_at"`
-	UpdatedAt  int64          `json:"updated_at"`
+	Status      JobStatus      `json:"status"`
+	Error       string         `json:"error,omitempty"`
+	Artifacts   *JobArtifacts  `json:"artifacts,omitempty"`
+	Metadata    *VideoMetadata `json:"metadata,omitempty"`
+	RetryCount  int            `json:"retry_count"`
+	CallbackURL string         `json:"callback_url,omitempty"`
+	CreatedAt   int64          `json:"created_at"`
+	UpdatedAt   int64          `json:"updated_at"`
 }
 
 func jobKey(videoID string) string {
@@ -68,11 +69,13 @@ func setJobState(videoID string, state JobState) error {
 }
 
 // PublishJob publica um videoID na fila e registra o estado inicial como pending.
+// callbackURL é opcional: se não vazio, o worker notificará essa URL ao concluir.
 // Deve ser chamado pelo produtor (API) ao submeter um vídeo para processamento.
-func PublishJob(videoID string) error {
+func PublishJob(videoID, callbackURL string) error {
 	state := JobState{
-		Status:    JobStatusPending,
-		CreatedAt: time.Now().Unix(),
+		Status:      JobStatusPending,
+		CallbackURL: callbackURL,
+		CreatedAt:   time.Now().Unix(),
 	}
 	if err := setJobState(videoID, state); err != nil {
 		return fmt.Errorf("erro ao criar estado do job: %w", err)

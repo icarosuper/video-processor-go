@@ -18,6 +18,7 @@ import (
 
 	"video-processor/config"
 	"video-processor/internal/processor"
+	"video-processor/internal/webhook"
 	"video-processor/metrics"
 	"video-processor/minio"
 	"video-processor/queue"
@@ -80,7 +81,7 @@ func main() {
 					log.Info().Int("workerID", workerID).Msg("Finalizando worker graciosamente")
 					return
 				default:
-					if err := processNextMessage(ctx, workerID); err != nil {
+					if err := processNextMessage(ctx, workerID, cfg); err != nil {
 						if err != context.Canceled {
 							log.Error().Err(err).Int("workerID", workerID).Msg("Erro ao processar mensagem")
 						}
@@ -153,7 +154,7 @@ func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("OK"))
 }
 
-func processNextMessage(ctx context.Context, workerID int) error {
+func processNextMessage(ctx context.Context, workerID int, cfg *config.Config) error {
 	// Bloqueia até receber mensagem ou ctx ser cancelado (shutdown).
 	// BRPOPLPUSH move o job atomicamente para a fila de processamento.
 	msg, err := queue.ConsumeMessage(ctx)
@@ -200,6 +201,10 @@ func processNextMessage(ctx context.Context, workerID int) error {
 						log.Warn().Err(err).Str("videoID", videoID).Msg("Falha ao mover job para dead letter queue")
 					} else {
 						log.Error().Str("videoID", videoID).Str("erro", jobErr.Error()).Msg("Job movido para dead letter queue após esgotar tentativas")
+						// Notifica a API sobre a falha permanente (retries esgotados)
+						if state != nil && state.CallbackURL != "" {
+							go notifyWebhook(state.CallbackURL, cfg.WebhookSecret, videoID, state)
+						}
 					}
 				}
 			}
@@ -283,6 +288,11 @@ func processNextMessage(ctx context.Context, workerID int) error {
 			log.Warn().Err(err).Str("videoID", videoID).Msg("Falha ao atualizar estado do job para done")
 		}
 
+		// Notifica a API sobre o sucesso
+		if state, err := queue.GetJobState(videoID); err == nil && state != nil && state.CallbackURL != "" {
+			go notifyWebhook(state.CallbackURL, cfg.WebhookSecret, videoID, state)
+		}
+
 		duration := time.Since(startTime).Seconds()
 		metrics.ProcessingDuration.Observe(duration)
 		metrics.VideosProcessedTotal.WithLabelValues("success").Inc()
@@ -335,4 +345,21 @@ func buildJobArtifacts(videoID, processedID string, result *processor.Processing
 		artifacts.HLS = "hls/" + videoID
 	}
 	return artifacts
+}
+
+// notifyWebhook envia a notificação de conclusão do job ao callbackURL em background.
+// Erros de entrega são apenas logados — não afetam o resultado do job.
+func notifyWebhook(callbackURL, secret, videoID string, state *queue.JobState) {
+	payload := webhook.Payload{
+		VideoID:   videoID,
+		Status:    string(state.Status),
+		Error:     state.Error,
+		Artifacts: state.Artifacts,
+		Metadata:  state.Metadata,
+	}
+	if err := webhook.Notify(callbackURL, secret, payload); err != nil {
+		log.Warn().Err(err).Str("videoID", videoID).Str("callbackURL", callbackURL).Msg("Falha ao enviar webhook")
+	} else {
+		log.Info().Str("videoID", videoID).Str("callbackURL", callbackURL).Msg("Webhook enviado com sucesso")
+	}
 }

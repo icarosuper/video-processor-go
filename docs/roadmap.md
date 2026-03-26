@@ -4,7 +4,7 @@
 
 Worker assíncrono que uma API chama para processar vídeos enviados por usuários (modelo YouTube): recebe um `videoID`, processa em pipeline de 7 etapas com FFmpeg, e entrega os artefatos no MinIO.
 
-## Status Atual: ~55% pronto para produção
+## Status Atual: ~70% pronto para produção
 
 O pipeline FFmpeg funciona. A infraestrutura básica existe. Mas faltam as peças que tornam o sistema **confiável e integrável** com uma API real.
 
@@ -30,16 +30,7 @@ O pipeline FFmpeg funciona. A infraestrutura básica existe. Mas faltam as peça
 - **P4**: Metadados do vídeo persistidos — `AnalyzeContent` retorna `*VideoMetadata`; gravados no estado `done` do job; disponíveis para a API via `GetJobState`
 - **P5**: Validação de entrada mais rigorosa — limite de tamanho configurável via `MAX_FILE_SIZE_MB` (default 5GB); verificado antes do download com `StatObject`
 - **Métricas operacionais**: `active_workers` Inc/Dec por job; `queue_size` atualizado a cada 30s; `video_size_bytes` registrado após download
-
----
-
-## 🔴 Crítico — Bloqueadores para uso em produção
-
-### C3. Falhas não chegam à API (parcialmente resolvido)
-
-O estado do job é gravado como `failed` com a mensagem de erro e a API pode consultar via `GetJobState(videoID)`. Mas requer polling ativo — não há notificação push.
-
-**Pendente**: implementar webhook ou callback para a API não precisar fazer polling.
+- **C3**: Webhook/callback — ao concluir (sucesso ou falha permanente), o worker faz POST ao `callbackURL` registrado no job com o payload completo; HMAC-SHA256 opcional via `WEBHOOK_SECRET`
 
 ---
 
@@ -71,7 +62,6 @@ Hoje gera um único MP4 transcodificado. Para streaming adaptativo funcionar, pr
 
 ## 🔵 Longo Prazo — Escalabilidade e features avançadas
 
-- **Webhooks**: notificar a API quando o processamento terminar, sem polling
 - **Auto-scaling**: aumentar workers baseado no tamanho da fila
 - **Escala horizontal**: múltiplas instâncias do worker em máquinas diferentes
 - **Priorização de fila**: vídeos curtos na frente, vídeos longos em fila separada

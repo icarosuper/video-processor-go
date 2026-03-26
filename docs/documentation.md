@@ -1,16 +1,14 @@
 # Video Processor Go - Documentação do Projeto
 
-## 📋 Visão Geral
+## Visão Geral
 
-O **Video Processor Go** é um sistema distribuído de processamento de vídeos construído em Go, utilizando uma arquitetura baseada em workers e filas de mensagens. O sistema foi projetado para processar vídeos de forma assíncrona e escalável, implementando um pipeline de múltiplas etapas que inclui validação, transcodificação, geração de thumbnails, extração de áudio, análise de conteúdo e preparação para streaming.
+O **Video Processor Go** é um sistema distribuído de processamento de vídeos construído em Go, utilizando uma arquitetura baseada em workers e filas de mensagens. O sistema processa vídeos de forma assíncrona e escalável através de um pipeline de 7 etapas com FFmpeg.
 
-## 🎯 Objetivo Principal
+## Objetivo Principal
 
-O objetivo do sistema é receber vídeos brutos, processá-los através de um pipeline de transformações, e armazenar os resultados processados em um serviço de armazenamento de objetos (MinIO). A comunicação entre os componentes é desacoplada através do Redis, permitindo escalabilidade horizontal e resiliência.
+Receber vídeos brutos, processá-los através de um pipeline de transformações (validação, transcodificação, thumbnails, áudio, preview e HLS), e armazenar os resultados no MinIO. A comunicação é desacoplada via Redis, permitindo escalabilidade horizontal.
 
-## 🏗️ Arquitetura
-
-### Arquitetura de Alto Nível
+## Arquitetura
 
 ```
 ┌─────────────────┐      ┌──────────────┐      ┌──────────────┐
@@ -33,88 +31,51 @@ O objetivo do sistema é receber vídeos brutos, processá-los através de um pi
 
 ### Componentes Principais
 
-#### 1. **Workers Concurrentes**
-- Sistema baseado em múltiplos workers que processam vídeos em paralelo
-- Número configurável de workers (padrão: número de CPUs da máquina)
-- Cada worker consome mensagens da fila de forma independente
-- Shutdown gracioso para encerramento controlado
+#### 1. Workers Concorrentes
+- Múltiplos workers processando vídeos em paralelo
+- Número configurável via `WORKER_COUNT` (padrão: número de CPUs)
+- Graceful shutdown com timeout de 30 segundos
 
-#### 2. **Pipeline de Processamento**
-O pipeline consiste em 7 etapas sequenciais:
+#### 2. Pipeline de Processamento
 
-1. **Validação** (`validate.go`)
-   - Verifica integridade do arquivo de vídeo
-   - Valida formato e codecs suportados
+7 etapas sequenciais em `internal/processor/processor-steps/`:
 
-2. **Transcodificação** (`transcode.go`)
-   - Conversão para formatos padronizados
-   - Ajuste de resoluções e bitrates
+| Etapa | Arquivo | Obrigatória | Saída |
+|---|---|---|---|
+| 1. Validação | `validate.go` | Sim | — |
+| 2. Análise | `analysis.go` | Não (informativa) | metadados no log |
+| 3. Transcodificação | `transcode.go` | Sim | `*_output.mp4` |
+| 4. Thumbnails | `thumbnail.go` | Não | `thumbnails/thumb_00N.jpg` |
+| 5. Extração de Áudio | `audio.go` | Não | `audio.mp3` |
+| 6. Preview | `preview.go` | Não | `preview.mp4` |
+| 7. Streaming HLS | `streaming.go` | Não | `streaming/*.ts` + `playlist.m3u8` |
 
-3. **Geração de Thumbnails** (`thumbnail.go`)
-   - Criação de imagens de pré-visualização
-   - Múltiplos timestamps do vídeo
+> **Atenção**: atualmente apenas o vídeo transcodificado (etapa 3) é enviado ao MinIO. Os artefatos das etapas 4–7 são gerados em `tempDir` e descartados ao final. Ver [Problemas Conhecidos](#problemas-conhecidos).
 
-4. **Extração de Áudio** (`audio.go`)
-   - Separação do track de áudio
-   - Conversão para formatos de áudio padronizados
+#### 3. Sistema de Filas (Redis)
 
-5. **Geração de Preview** (`preview.go`)
-   - Criação de versões de baixa resolução
-   - Clips curtos para pré-visualização
+- **`PROCESSING_REQUEST_QUEUE`**: recebe IDs de vídeos para processar (BLPop)
+- **`PROCESSING_FINISHED_QUEUE`**: recebe IDs de vídeos processados com sucesso (LPush)
 
-6. **Análise de Conteúdo** (`analysis.go`)
-   - Detecção de características do vídeo
-   - Metadados e propriedades técnicas
+#### 4. Armazenamento (MinIO)
 
-7. **Segmentação para Streaming** (`streaming.go`)
-   - Criação de segmentos HLS/DASH
-   - Preparação para streaming adaptativo
+- Prefixo `raw/`: vídeos originais
+- Prefixo `processed/`: vídeos transcodificados
 
-#### 3. **Sistema de Filas (Redis)**
-- **Fila de Requisições**: `PROCESSING_REQUEST_QUEUE`
-  - Recebe IDs de vídeos para processamento
-  - Consumo via BLPop (blocking pop)
+## Stack Tecnológica
 
-- **Fila de Sucesso**: `PROCESSING_FINISHED_QUEUE`
-  - Recebe IDs de vídeos processados com sucesso
-  - Publicação via LPush
+| Componente | Tecnologia |
+|---|---|
+| Linguagem | Go 1.24 |
+| Filas | Redis 7 (go-redis/v8) |
+| Armazenamento | MinIO (minio-go/v7) |
+| Processamento | FFmpeg / FFprobe |
+| Métricas | Prometheus (promauto) |
+| Logging | Zerolog |
+| Config | caarlos0/env v10 + godotenv |
+| Containers | Docker + Docker Compose |
 
-#### 4. **Armazenamento (MinIO)**
-- **Buckets**: Organização por tipo de conteúdo
-  - `videos/`: Bucket principal
-  - Prefixos `raw/`: Vídeos originais
-  - Prefixos `processed/`: Vídeos processados
-
-## 🛠️ Stack Tecnológica
-
-### Linguagem e Runtime
-- **Go 1.24.5**: Linguagem principal
-- **Context**: Uso de context para timeout e cancelamento
-
-### Dependências Principais
-```go
-require (
-    github.com/caarlos0/env/v10 v10.0.0          // Parsing de environment variables
-    github.com/go-redis/redis/v8 v8.11.5         // Cliente Redis
-    github.com/joho/godotenv v1.5.1              // Carregamento de .env
-    github.com/minio/minio-go/v7 v7.0.95         // Cliente MinIO
-)
-```
-
-### Infraestrutura
-- **Redis 7**: Sistema de filas e mensageria
-- **MinIO**: Armazenamento de objetos compatível com S3
-- **FFmpeg**: Ferramenta de processamento de vídeo (instalada no container)
-- **Docker & Docker Compose**: Orquestração de containers
-- **Alpine Linux**: Imagem base leve para produção
-
-### Padrões de Design
-- **Pipeline Pattern**: Sequência ordenada de etapas de processamento
-- **Worker Pool**: Múltiplos workers consumindo da mesma fila
-- **Configuration Pattern**: Configurações centralizadas
-- **Graceful Shutdown**: Encerramento controlado de recursos
-
-## 📂 Estrutura do Projeto
+## Estrutura do Projeto
 
 ```
 video-processor-go/
@@ -124,275 +85,129 @@ video-processor-go/
 │   └── processor/
 │       ├── processor.go             # Orquestrador do pipeline
 │       └── processor-steps/        # Etapas do processamento
-│           ├── analysis.go          # Análise de conteúdo
-│           ├── audio.go             # Extração de áudio
-│           ├── preview.go           # Geração de pré-visualização
-│           ├── streaming.go         # Segmentação para streaming
-│           ├── thumbnail.go         # Geração de thumbnails
-│           ├── transcode.go         # Transcodificação
-│           └── validate.go          # Validação de vídeo
+│           ├── analysis.go
+│           ├── audio.go
+│           ├── preview.go
+│           ├── streaming.go
+│           ├── thumbnail.go
+│           ├── transcode.go
+│           ├── validate.go
+│           ├── test_helpers.go      # Helpers para testes
+│           └── testdata/
+├── metrics/
+│   └── metrics.go                   # Métricas Prometheus
 ├── minio/
 │   └── client.go                    # Cliente MinIO
 ├── queue/
 │   └── client.go                    # Cliente Redis
-├── main.go                          # Ponto de entrada
-├── docker-compose.yml               # Orquestração de serviços
-├── Dockerfile                       # Configuração do container
-├── go.mod                           # Dependências Go
-├── go.sum                           # Lock de dependências
-├── .env-example                     # Exemplo de variáveis de ambiente
-└── .gitignore                       # Arquivos ignorados pelo git
+├── test/
+│   └── integration/                 # Testes de integração (testcontainers)
+├── docs/
+├── main.go
+├── docker-compose.yml
+└── Dockerfile
 ```
 
-## ⚙️ Configuração
+## Configuração
 
 ### Variáveis de Ambiente
 
-#### Redis (Obrigatório)
-```bash
-REDIS_HOST=localhost:6379                    # Host e porta do Redis
-PROCESSING_REQUEST_QUEUE=video_queue         # Nome da fila de requisições
-PROCESSING_FINISHED_QUEUE=video_success_queue # Nome da fila de sucesso
-```
+| Variável | Obrigatória | Descrição |
+|---|---|---|
+| `REDIS_HOST` | Sim | Ex: `localhost:6379` |
+| `PROCESSING_REQUEST_QUEUE` | Sim | Nome da fila de entrada |
+| `PROCESSING_FINISHED_QUEUE` | Sim | Nome da fila de sucesso |
+| `MINIO_ENDPOINT` | Sim | Ex: `localhost:9000` |
+| `MINIO_ROOT_USER` | Sim | Usuário MinIO |
+| `MINIO_ROOT_PASSWORD` | Sim | Senha MinIO |
+| `MINIO_BUCKET_NAME` | Sim | Nome do bucket |
+| `WORKER_COUNT` | Não | Padrão: `runtime.NumCPU()` |
 
-#### MinIO (Obrigatório)
-```bash
-MINIO_ENDPOINT=localhost:9000                 # Endpoint do MinIO
-MINIO_ROOT_USER=minioadmin                    # Usuário administrador
-MINIO_ROOT_PASSWORD=minioadmin                # Senha administrador
-MINIO_BUCKET_NAME=videos                      # Nome do bucket
-```
+### Observação sobre `.env`
 
-#### Workers (Opcional)
-```bash
-WORKER_COUNT=4                                # Número de workers (padrão: número de CPUs)
-```
+O `config.LoadConfig()` chama `godotenv.Load()` com `log.Fatal` caso o arquivo `.env` não exista. Em ambientes Docker/Kubernetes onde as variáveis são injetadas diretamente, isso causa falha na inicialização. Ver [Problemas Conhecidos](#problemas-conhecidos).
 
-### Configurações com Defaults
-
-- **SSL MinIO**: Desativado (`useSSL = false`)
-- **Arquivos Temporários**: Armazenados em `/tmp`
-- **Timeout de Context**: Sem limite definido
-
-## 🚀 Como Executar
+## Como Executar
 
 ### Desenvolvimento
 
 ```bash
-# 1. Clone o repositório
-git clone <repository-url>
-cd video-processor-go
-
-# 2. Copie o arquivo de ambiente
 cp .env-example .env
+# editar .env com suas configurações
 
-# 3. Edite as variáveis de ambiente conforme necessário
-nano .env
+docker-compose up -d redis minio
 
-# 4. Suba os serviços (Redis e MinIO)
-docker-compose up -d
-
-# 5. Instale as dependências
 go mod download
-
-# 6. Execute o projeto
 go run main.go
 ```
 
-### Produção (Docker)
+### Produção (Docker Compose)
 
 ```bash
-# 1. Build da imagem
-docker build -t video-processor:latest .
-
-# 2. Execute o container
-docker run -d \
-  --name video-processor \
-  --env-file .env \
-  video-processor:latest
+docker-compose up -d
 ```
 
-## 🔄 Fluxo de Processamento
+> **Atenção**: o serviço `worker` no `docker-compose.yml` atual está sem as variáveis obrigatórias `PROCESSING_REQUEST_QUEUE`, `PROCESSING_FINISHED_QUEUE` e `MINIO_BUCKET_NAME`. Ver [Problemas Conhecidos](#problemas-conhecidos).
 
-### 1. Ingestão
-```
-Produtor → Redis (PROCESSING_REQUEST_QUEUE) → {VideoID}
-```
+## Fluxo de Processamento
 
-### 2. Consumo
 ```
-Worker → BLPop(PROCESSING_REQUEST_QUEUE) → VideoID
-```
-
-### 3. Download
-```
-Worker → MinIO → Download vídeo original (raw/)
+1. Produtor publica VideoID → PROCESSING_REQUEST_QUEUE
+2. Worker consome via BLPop
+3. Worker baixa raw/{VideoID} do MinIO
+4. Pipeline executa as 7 etapas
+5. Worker faz upload processed/{VideoID}_processed para MinIO
+6. Worker publica VideoID → PROCESSING_FINISHED_QUEUE
 ```
 
-### 4. Pipeline de Processamento
-```
-Worker → Validate → Transcode → Thumbnail → Audio → Preview → Analysis → Streaming
-```
+## Problemas Conhecidos
 
-### 5. Upload
-```
-Worker → MinIO → Upload processado (processed/)
-```
+Estes são bugs identificados que ainda não foram corrigidos.
 
-### 6. Notificação de Sucesso
-```
-Worker → Redis (PROCESSING_FINISHED_QUEUE) → {VideoID}
-```
+### 1. Workers travam no shutdown
 
-## 📊 Estado Atual do Projeto
+`queue.ConsumeMessage()` usa `BLPop` com um `context.Background()` global, ignorando o contexto de cancelamento passado pelos workers. Ao receber SIGTERM, os workers ficam bloqueados no BLPop até a próxima mensagem chegar ou o timeout de 30s forçar o encerramento.
 
-### ✅ Funcionalidades Implementadas
+**Arquivo**: `queue/client.go:35`
+**Impacto**: Shutdown não é verdadeiramente gracioso.
 
-- [x] Arquitetura de workers concorrentes
-- [x] Integração com MinIO (download/upload)
-- [x] Sistema de filas com Redis
-- [x] Gerenciamento de configurações
-- [x] Shutdown gracioso
-- [x] Dockerização completa
-- [x] Pipeline orquestrado
-- [x] Tratamento de erros estruturado
+### 2. Artefatos das etapas 4–7 são descartados
 
-### ⚠️ Funcionalidades Incompletas
+Thumbnails, áudio extraído, preview e segmentos HLS são gerados em `tempDir`, mas o `defer os.RemoveAll(tempDir)` apaga tudo antes de qualquer upload. Nenhum desses artefatos chega ao MinIO.
 
-**ATENÇÃO**: As etapas de processamento de vídeo são atualmente **placeholders**. O sistema baixa e faz upload dos vídeos, mas **não realiza processamento real**.
+**Arquivo**: `internal/processor/processor.go:26`
+**Impacto**: As etapas 4, 5, 6 e 7 do pipeline não têm efeito real.
 
-- [ ] Validação de vídeo (placeholder apenas)
-- [ ] Transcodificação com FFmpeg
-- [ ] Geração de thumbnails
-- [ ] Extração de áudio
-- [ ] Geração de preview
-- [ ] Análise de conteúdo
-- [ ] Segmentação para streaming (HLS/DASH)
+### 3. `docker-compose.yml` — worker falha na inicialização
 
-## 🔮 Possíveis Evoluções e Melhorias
+O serviço `worker` não define `PROCESSING_REQUEST_QUEUE`, `PROCESSING_FINISHED_QUEUE` e `MINIO_BUCKET_NAME`, que são marcadas como `notEmpty` no config. O container falha ao subir.
 
-### Curto Prazo (Essencial para Funcionalidade Básica)
+**Arquivo**: `docker-compose.yml`
+**Impacto**: `docker-compose up` não funciona end-to-end.
 
-1. **Implementação das Etapas do Pipeline**
-   - Integração real com FFmpeg
-   - Validação de formatos suportados
-   - Geração de thumbnails com múltiplos timestamps
-   - Extração de áudio em diferentes formatos
+### 4. Senha MinIO exposta em log
 
-2. **Correções Críticas**
-   - Bug no publish da fila de sucesso (main.go:102)
-   - Tratamento adequado de arquivos temporários
-   - Ativação de SSL em produção
+`config.LoadConfig()` usa `fmt.Printf("Config loaded successfully: %+v\n", cfg)`, que imprime `MinioRootPassword` em texto puro no stdout.
 
-3. **Observabilidade**
-   - Logging estruturado (JSON)
-   - Métricas básicas (tempo de processamento, taxa de sucesso/falha)
-   - Health checks endpoint
+**Arquivo**: `config/config.go:60`
+**Impacto**: Vazamento de credenciais em logs.
 
-### Médio Prazo (Melhorias de Arquitetura)
+### 5. `godotenv.Load()` com Fatal
 
-1. **Resiliência**
-   - Mecanismo de retry com exponential backoff
-   - Circuit breaker para chamadas externas
-   - Dead letter queue para falhas
-   - Timeout por etapa do pipeline
+Se não existir arquivo `.env` (produção com env vars injetadas), o processo morre com `unable to load .env file`. O erro deveria ser ignorado quando o arquivo não existir.
 
-2. **Monitoramento**
-   - Integração com Prometheus
-   - Dashboard com Grafana
-   - Alertas para falhas críticas
-   - Tracing distribuído (OpenTelemetry)
+**Arquivo**: `config/config.go:49`
+**Impacto**: Impossível rodar em Docker/Kubernetes sem um `.env` em disco.
 
-3. **Performance**
-   - Pool de conexões Redis
-   - Upload/download com multipart para MinIO
-   - Compressão de arquivos processados
-   - Cache de metadados
+## Considerações Operacionais
 
-4. **Segurança**
-   - Validação rigorosa de inputs
-   - Rate limiting
-   - Auditoria de logs
-   - Secrets management (Vault/Kubernetes Secrets)
-
-### Longo Prazo (Escalabilidade e Features Avançadas)
-
-1. **Multi-tenant**
-   - Suporte a múltiplos buckets
-   - Isolamento por tenant
-   - Configurações específicas por cliente
-
-2. **Processamento Distribuído**
-   - Suporte a processamento em múltiplas máquinas
-   - Coordenação via etcd ou similar
-   - Auto-scaling baseado em fila
-
-3. **Features Avançadas**
-   - Suporte a vídeos 360°
-   - Processamento de vídeos ao vivo (real-time)
-   - Reconhecimento de objetos/cenas (IA)
-   - Transcrição automática (speech-to-text)
-   - Detecção de conteúdo impróprio
-
-4. **API e Integrações**
-   - API REST para gerenciamento
-   - Webhooks para notificações
-   - Integração com CDNs
-   - SDK para múltiplas linguagens
-
-5. **Arquitetura de Eventos**
-   - Event-driven architecture completa
-   - Suporte a múltiplos event brokers (Kafka, RabbitMQ)
-   - Event sourcing para auditoria
-   - CQRS para leituras otimizadas
-
-## 🔗 Pontos de Integração
-
-### APIs Externas
-- **MinIO S3 API**: Compatível com AWS S3
-- **Redis**: Protocolo Redis padrão
-
-### Serviços Dependentes
-- **Redis**: Obrigatório para filas
-- **MinIO**: Obrigatório para armazenamento
-- **FFmpeg**: Obrigatório para processamento de vídeo
-
-## 📝 Notas Importantes
-
-### Performance Considerations
-- Número de workers deve ser calibrado based em CPU e I/O
-- Processamento de vídeo é intensivo em recursos
-- Considere usar máquinas com GPU para transcodificação
-- Armazenamento temporário deve ser rápido (SSD recomendado)
-
-### Security Considerations
-- SSL/TLS deve ser ativado em produção
-- Credenciais não devem estar em código
-- Validação de arquivos é essencial para evitar malware
-- Rate limiting para evitar DoS
-
-### Operational Considerations
-- Logs devem ser centralizados (ELK, Loki, etc)
-- Métricas são essenciais para operação
-- Backup do Redis e MinIO são necessários
-- Documentação de runbooks é recomendada
-
-## 📚 Recursos Adicionais
-
-### Documentação Relacionada
-- [ROADMAP.md](./ROADMAP.md): Detalhes do que falta implementar
-- [Go Documentation](https://golang.org/doc/)
-- [FFmpeg Documentation](https://ffmpeg.org/documentation.html)
-- [MinIO Documentation](https://min.io/docs/minio/linux/index.html)
-- [Redis Documentation](https://redis.io/docs/)
-
-### Comunidade e Suporte
-- Repositório do projeto
-- Issues e Pull Requests
-- Documentação de API (quando disponível)
+- Processamento de vídeo é CPU-intensivo; calibrar `WORKER_COUNT` conforme hardware
+- Armazenamento temporário em `/tmp`; recomendado SSD para performance
+- SSL/TLS no MinIO está hardcoded como `false`; deve ser configurável para produção
+- Logs em formato ConsoleWriter (não JSON) por padrão — trocar para JSON em produção
 
 ---
 
-**Última Atualização**: 2026-01-27
-**Versão**: 0.1.0 (Development)
-**Status**: 🚧 Em Desenvolvimento - Pipeline Incompleto
+**Versão**: 0.1.0
+**Status**: Funcional (pipeline básico) — com bugs conhecidos documentados acima
+**Última Atualização**: 2026-03-25

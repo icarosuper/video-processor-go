@@ -5,6 +5,7 @@ Sistema distribuído de processamento de vídeos construído em Go, utilizando a
 [![Go Version](https://img.shields.io/badge/Go-1.24-00ADD8?style=flat&logo=go)](https://golang.org/)
 [![Tests](https://img.shields.io/badge/tests-passing-brightgreen)](docs/TESTING.md)
 [![Coverage](https://img.shields.io/badge/coverage-63.7%25-yellow)](docs/TESTING.md)
+[![Status](https://img.shields.io/badge/status-bugs%20known-orange)](docs/documentation.md#problemas-conhecidos)
 
 ## ✨ Características
 
@@ -207,18 +208,27 @@ docker-compose down
 
 ## 🛣️ Roadmap
 
-### ✅ Concluído
+### ✅ Implementado
 
-- [x] Pipeline de processamento com FFmpeg
+- [x] Pipeline de processamento com FFmpeg (7 etapas)
 - [x] Logging estruturado (Zerolog)
 - [x] Métricas Prometheus
 - [x] Health check endpoint
 - [x] Testes unitários (63.7% cobertura)
+- [x] Testes de integração (testcontainers)
 
-### 🚧 Próximo
+### Bugs Conhecidos
 
-- [ ] Testes de integração
-- [ ] Retry mechanism
+- Workers travam no shutdown (BLPop sem context)
+- Artefatos das etapas 4–7 (thumbnails, HLS, áudio) não chegam ao MinIO
+- `docker-compose.yml` com env vars faltando no serviço worker
+- Senha MinIO exposta em log no startup
+- Fatal se não existir arquivo `.env`
+
+### Próximo
+
+- [ ] Corrigir bugs listados acima
+- [ ] Retry com exponential backoff
 - [ ] Dead Letter Queue
 - [ ] Circuit breaker
 - [ ] Dashboard Grafana

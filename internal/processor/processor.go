@@ -98,11 +98,11 @@ func ProcessVideo(inputPath, outputPath string) (*ProcessingResult, error) {
 	}
 	metrics.ProcessingStepDuration.WithLabelValues("preview").Observe(time.Since(start).Seconds())
 
-	// 7. Segmentação para streaming
+	// 7. Segmentação para streaming (usa o input original para evitar dupla transcodificação)
 	log.Info().Msg("Etapa 7/7: Segmentando para streaming")
 	start = time.Now()
 	streamingDir := filepath.Join(tempDir, "streaming")
-	if err := processor_steps.SegmentForStreaming(transcodedPath, streamingDir); err != nil {
+	if err := processor_steps.SegmentForStreaming(inputPath, streamingDir); err != nil {
 		log.Warn().Err(err).Msg("Falha na segmentação para streaming")
 	} else {
 		result.StreamingDir = streamingDir

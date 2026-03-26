@@ -4,7 +4,7 @@
 
 Worker assíncrono que uma API chama para processar vídeos enviados por usuários (modelo YouTube): recebe um `videoID`, processa em pipeline de 7 etapas com FFmpeg, e entrega os artefatos no MinIO.
 
-## Status Atual: ~70% pronto para produção
+## Status Atual: ~85% pronto para produção
 
 O pipeline FFmpeg funciona. A infraestrutura básica existe. Mas faltam as peças que tornam o sistema **confiável e integrável** com uma API real.
 
@@ -31,16 +31,7 @@ O pipeline FFmpeg funciona. A infraestrutura básica existe. Mas faltam as peça
 - **P5**: Validação de entrada mais rigorosa — limite de tamanho configurável via `MAX_FILE_SIZE_MB` (default 5GB); verificado antes do download com `StatObject`
 - **Métricas operacionais**: `active_workers` Inc/Dec por job; `queue_size` atualizado a cada 30s; `video_size_bytes` registrado após download
 - **C3**: Webhook/callback — ao concluir (sucesso ou falha permanente), o worker faz POST ao `callbackURL` registrado no job com o payload completo; HMAC-SHA256 opcional via `WEBHOOK_SECRET`
-
----
-
-## 🟠 Importante — Necessário para qualidade de produto
-
-### P1. Múltiplas resoluções de saída
-
-Hoje gera um único MP4 transcodificado. Para streaming adaptativo funcionar, precisa de múltiplas qualidades: 360p, 480p, 720p e 1080p (quando o original permitir). O HLS gerado hoje usa resolução única.
-
-**Solução**: etapa de transcodificação gerar múltiplos outputs; playlist HLS master referenciando cada qualidade.
+- **P1**: Múltiplas resoluções HLS — `SegmentForStreaming` gera 240p/360p/480p/720p/1080p (somente ≤ resolução original) + `master.m3u8`; `UploadDirectory` agora é recursivo; HLS gerado direto do input original (sem dupla transcodificação)
 
 ---
 

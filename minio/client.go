@@ -146,19 +146,22 @@ func UploadFile(srcPath, objectPath string) error {
 	return nil
 }
 
-// UploadDirectory faz upload de todos os arquivos (não-recursivo) de srcDir
-// para o MinIO com o prefixo objectPrefix.
+// UploadDirectory faz upload recursivo de todos os arquivos de srcDir
+// para o MinIO com o prefixo objectPrefix, preservando a estrutura de subpastas.
 func UploadDirectory(srcDir, objectPrefix string) error {
 	entries, err := os.ReadDir(srcDir)
 	if err != nil {
 		return fmt.Errorf("[minio] erro ao ler diretório %s: %w", srcDir, err)
 	}
 	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
 		srcPath := filepath.Join(srcDir, entry.Name())
 		objectPath := objectPrefix + "/" + entry.Name()
+		if entry.IsDir() {
+			if err := UploadDirectory(srcPath, objectPath); err != nil {
+				return err
+			}
+			continue
+		}
 		if err := UploadFile(srcPath, objectPath); err != nil {
 			return err
 		}

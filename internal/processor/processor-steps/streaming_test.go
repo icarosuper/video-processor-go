@@ -15,25 +15,44 @@ func TestSegmentForStreaming_ValidVideo(t *testing.T) {
 		t.Fatalf("SegmentForStreaming() falhou: %v", err)
 	}
 
-	// Verificar playlist
-	playlistPath := filepath.Join(outputDir, "playlist.m3u8")
-	if _, err := os.Stat(playlistPath); os.IsNotExist(err) {
-		t.Fatal("SegmentForStreaming() não criou playlist.m3u8")
+	// Verificar master playlist
+	masterPath := filepath.Join(outputDir, "master.m3u8")
+	if _, err := os.Stat(masterPath); os.IsNotExist(err) {
+		t.Fatal("SegmentForStreaming() não criou master.m3u8")
 	}
 
-	// Verificar se há pelo menos um segmento .ts
+	// Verificar que existe ao menos uma subpasta de resolução com playlist e segmentos .ts
 	entries, err := os.ReadDir(outputDir)
 	if err != nil {
 		t.Fatalf("erro ao ler diretório de saída: %v", err)
 	}
-	tsCount := 0
+
+	variantFound := false
 	for _, e := range entries {
-		if strings.HasSuffix(e.Name(), ".ts") {
-			tsCount++
+		if !e.IsDir() {
+			continue
 		}
+		varDir := filepath.Join(outputDir, e.Name())
+		playlistPath := filepath.Join(varDir, "playlist.m3u8")
+		if _, err := os.Stat(playlistPath); os.IsNotExist(err) {
+			t.Errorf("variante %s não tem playlist.m3u8", e.Name())
+			continue
+		}
+		segs, _ := os.ReadDir(varDir)
+		tsCount := 0
+		for _, s := range segs {
+			if strings.HasSuffix(s.Name(), ".ts") {
+				tsCount++
+			}
+		}
+		if tsCount == 0 {
+			t.Errorf("variante %s não tem segmentos .ts", e.Name())
+			continue
+		}
+		variantFound = true
 	}
-	if tsCount == 0 {
-		t.Error("SegmentForStreaming() não gerou nenhum segmento .ts")
+	if !variantFound {
+		t.Error("SegmentForStreaming() não gerou nenhuma variante de resolução")
 	}
 }
 

@@ -18,11 +18,9 @@ internal/processor/processor.go  # orquestrador das 7 etapas, retorna Processing
 internal/processor/processor-steps/*.go  # cada etapa do pipeline
 ```
 
-## Estado atual (~70% pronto para produção)
+## Estado atual (~85% pronto para produção)
 
-O pipeline FFmpeg funciona end-to-end com confiabilidade de jobs (retry, DLQ, recovery de órfãos), webhook de notificação, metadados persistidos e métricas operacionais reais. O principal bloqueador restante para uso em produção é:
-
-1. **Resolução única** — gera um MP4 só. Streaming adaptativo real precisa de 360p/480p/720p/1080p (P1).
+O pipeline FFmpeg funciona end-to-end com confiabilidade de jobs (retry, DLQ, recovery de órfãos), webhook de notificação, metadados persistidos, métricas operacionais reais e HLS adaptativo com múltiplas resoluções. Principais itens restantes: melhorias operacionais (circuit breaker, timeout por etapa, SSL MinIO).
 
 Ver `docs/roadmap.md` para o plano completo.
 

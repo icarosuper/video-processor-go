@@ -30,17 +30,25 @@ func InitRedisClient(configs *config.Config) {
 	log.Info().Str("host", cfg.RedisHost).Msg("Cliente Redis conectado com sucesso")
 }
 
+func processingQueueName() string {
+	return cfg.ProcessingRequestQueue + ":processing"
+}
+
 // ConsumeMessage bloqueia até receber uma mensagem da fila ou o ctx ser cancelado.
+// Usa BRPOPLPUSH para mover o job atomicamente para a fila de processamento,
+// garantindo que o job não seja perdido em caso de crash do worker.
 func ConsumeMessage(ctx context.Context) (*Message, error) {
-	result, err := client.BLPop(ctx, 0, cfg.ProcessingRequestQueue).Result()
+	videoID, err := client.BRPopLPush(ctx, cfg.ProcessingRequestQueue, processingQueueName(), 0).Result()
 	if err != nil {
 		return nil, err
 	}
-	if len(result) < 2 {
-		return nil, nil
-	}
+	return &Message{VideoID: videoID}, nil
+}
 
-	return &Message{VideoID: result[1]}, nil
+// AcknowledgeMessage remove o job da fila de processamento após conclusão (sucesso ou falha).
+// Deve sempre ser chamado ao fim do processamento para não deixar jobs órfãos.
+func AcknowledgeMessage(videoID string) error {
+	return client.LRem(context.Background(), processingQueueName(), 1, videoID).Err()
 }
 
 func PublishSuccessMessage(videoID string) error {

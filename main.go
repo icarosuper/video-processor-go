@@ -138,7 +138,8 @@ func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func processNextMessage(ctx context.Context, workerID int) error {
-	// Bloqueia até receber mensagem ou ctx ser cancelado (shutdown)
+	// Bloqueia até receber mensagem ou ctx ser cancelado (shutdown).
+	// BRPOPLPUSH move o job atomicamente para a fila de processamento.
 	msg, err := queue.ConsumeMessage(ctx)
 	if err != nil {
 		return err
@@ -150,12 +151,30 @@ func processNextMessage(ctx context.Context, workerID int) error {
 	videoID := msg.VideoID
 	log.Info().Int("workerID", workerID).Str("videoID", videoID).Msg("Processando vídeo")
 
+	if err := queue.SetJobProcessing(videoID); err != nil {
+		log.Warn().Err(err).Str("videoID", videoID).Msg("Falha ao atualizar estado do job para processing")
+	}
+
 	processCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
 	done := make(chan error, 1)
 
 	go func() {
+		// jobErr rastreia o erro final para o defer abaixo.
+		var jobErr error
+
+		defer func() {
+			if jobErr != nil {
+				if err := queue.SetJobFailed(videoID, jobErr); err != nil {
+					log.Warn().Err(err).Str("videoID", videoID).Msg("Falha ao atualizar estado do job para failed")
+				}
+			}
+			if err := queue.AcknowledgeMessage(videoID); err != nil {
+				log.Warn().Err(err).Str("videoID", videoID).Msg("Falha ao confirmar processamento do job")
+			}
+		}()
+
 		startTime := time.Now()
 
 		inputPath := filepath.Join(os.TempDir(), videoID+"_input.mp4")
@@ -167,8 +186,9 @@ func processNextMessage(ctx context.Context, workerID int) error {
 		}()
 
 		if err := minio.DownloadVideo(minio.VideoTypeRaw, videoID, inputPath); err != nil {
+			jobErr = fmt.Errorf("erro ao baixar vídeo: %v", err)
 			metrics.VideosProcessedTotal.WithLabelValues("error").Inc()
-			done <- fmt.Errorf("erro ao baixar vídeo: %v", err)
+			done <- jobErr
 			return
 		}
 
@@ -177,15 +197,17 @@ func processNextMessage(ctx context.Context, workerID int) error {
 			defer os.RemoveAll(result.TempDir)
 		}
 		if err != nil {
+			jobErr = fmt.Errorf("erro ao processar vídeo: %v", err)
 			metrics.VideosProcessedTotal.WithLabelValues("error").Inc()
-			done <- fmt.Errorf("erro ao processar vídeo: %v", err)
+			done <- jobErr
 			return
 		}
 
 		processedID := videoID + "_processed"
 		if err := minio.UploadVideo(outputPath, minio.VideoTypeProcessed, processedID); err != nil {
+			jobErr = fmt.Errorf("erro ao fazer upload do vídeo: %v", err)
 			metrics.VideosProcessedTotal.WithLabelValues("error").Inc()
-			done <- fmt.Errorf("erro ao fazer upload do vídeo: %v", err)
+			done <- jobErr
 			return
 		}
 
@@ -212,9 +234,16 @@ func processNextMessage(ctx context.Context, workerID int) error {
 		}
 
 		if err := queue.PublishSuccessMessage(processedID); err != nil {
+			jobErr = fmt.Errorf("erro ao publicar mensagem de sucesso: %v", err)
 			metrics.VideosProcessedTotal.WithLabelValues("error").Inc()
-			done <- fmt.Errorf("erro ao publicar mensagem de sucesso: %v", err)
+			done <- jobErr
 			return
+		}
+
+		// Registra estado final e métricas de sucesso
+		artifacts := buildJobArtifacts(videoID, processedID, result)
+		if err := queue.SetJobDone(videoID, artifacts); err != nil {
+			log.Warn().Err(err).Str("videoID", videoID).Msg("Falha ao atualizar estado do job para done")
 		}
 
 		duration := time.Since(startTime).Seconds()
@@ -231,4 +260,25 @@ func processNextMessage(ctx context.Context, workerID int) error {
 	case <-processCtx.Done():
 		return fmt.Errorf("operação cancelada: %v", processCtx.Err())
 	}
+}
+
+// buildJobArtifacts monta o objeto de artefatos com os paths no MinIO
+// a partir do resultado do pipeline. Só inclui artefatos que foram gerados.
+func buildJobArtifacts(videoID, processedID string, result *processor.ProcessingResult) queue.JobArtifacts {
+	artifacts := queue.JobArtifacts{
+		Video: "processed/" + processedID,
+	}
+	if result.ThumbnailsDir != "" {
+		artifacts.Thumbnails = "thumbnails/" + videoID
+	}
+	if result.AudioPath != "" {
+		artifacts.Audio = "audio/" + videoID + ".mp3"
+	}
+	if result.PreviewPath != "" {
+		artifacts.Preview = "preview/" + videoID + "_preview.mp4"
+	}
+	if result.StreamingDir != "" {
+		artifacts.HLS = "hls/" + videoID
+	}
+	return artifacts
 }

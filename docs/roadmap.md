@@ -22,32 +22,24 @@ O pipeline FFmpeg funciona. A infraestrutura básica existe. Mas faltam as peça
 - **B3**: `docker-compose.yml` com todas as env vars obrigatórias
 - **B4**: Senha MinIO não é mais impressa em log
 - **B5**: Deploy sem arquivo `.env` funciona
+- **C1**: Estado de job implementado (`queue/job.go`) — `pending → processing → done/failed` no Redis com TTL de 24h; artefatos gerados registrados em `done`
+- **C2**: Consumo seguro com `BRPOPLPUSH` — job movido atomicamente para fila `{queue}:processing` ao consumir; `AcknowledgeMessage` remove ao concluir; `PublishJob` cria estado `pending` no produtor
 
 ---
 
 ## 🔴 Crítico — Bloqueadores para uso em produção
 
-Sem esses itens a API não consegue integrar de forma confiável.
+### C3. Falhas não chegam à API (parcialmente resolvido)
 
-### C1. Estado de job (maior gap)
+O estado do job é gravado como `failed` com a mensagem de erro. Mas a API precisa de polling ativo em `GetJobState(videoID)` — não há notificação push.
 
-Hoje a API publica um `videoID` no Redis e nunca mais sabe o que aconteceu. Não existe estado PENDING → PROCESSING → DONE/FAILED.
+**Pendente**: implementar webhook ou callback para a API não precisar fazer polling.
 
-**Impacto**: a API não pode responder ao usuário "seu vídeo está processando" nem "falhou por este motivo".
+### C4. Jobs órfãos na fila de processamento
 
-**Solução**: ao consumir um job, gravar estado no Redis Hash (`job:{videoID}` com campos `status`, `error`, `artifacts`). Atualizar ao longo do pipeline. A API consulta esse hash para polling ou para disparar webhook.
+Se o worker travar antes de chamar `AcknowledgeMessage`, o job fica preso em `{queue}:processing` para sempre. O estado no Redis fica em `processing` até expirar (24h).
 
-### C2. Jobs perdidos em caso de crash (BLPop destrutivo)
-
-`BLPop` remove a mensagem da fila imediatamente ao consumir. Se o worker travar durante o processamento, o job some — não há como reprocessar.
-
-**Solução**: usar `BRPOPLPUSH` para mover o job para uma fila de "em progresso" ao consumir, e só remover após confirmação de conclusão. Jobs que ficam presos nessa fila por mais de X minutos são recolocados na fila principal.
-
-### C3. Falhas não chegam à API
-
-Quando o processamento falha, nada é publicado na fila de sucesso. A API não sabe que o job falhou, nunca notifica o usuário.
-
-**Solução**: publicar na fila de resultado independente de sucesso ou falha, com campo `status` e `error`. Ou usar o estado de job do C1.
+**Solução**: goroutine de recuperação que periodicamente verifica jobs com `status=processing` e `updated_at` antigo, e os recoloca na fila principal.
 
 ---
 

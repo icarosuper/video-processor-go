@@ -20,9 +20,9 @@ internal/processor/processor-steps/*.go  # cada etapa do pipeline
 
 O pipeline FFmpeg funciona end-to-end. Os bloqueadores críticos para uso real são:
 
-1. **Sem estado de job** — a API publica um `videoID` e nunca sabe se processou, falhou ou está em andamento. Não existe PENDING → PROCESSING → DONE/FAILED.
+1. **Jobs órfãos** — se o worker travar antes de `AcknowledgeMessage`, o job fica preso em `{queue}:processing`. Falta goroutine de recuperação.
 
-2. **BLPop é destrutivo** — remove a mensagem da fila imediatamente. Se o worker travar durante o processamento, o job some. Precisa de `BRPOPLPUSH`.
+2. **Sem notificação push** — a API precisa de polling em `queue.GetJobState(videoID)`. Falta webhook/callback.
 
 3. **Falhas silenciosas** — quando o pipeline falha, nada é publicado. A API nunca fica sabendo.
 

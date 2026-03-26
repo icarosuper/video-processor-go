@@ -20,13 +20,9 @@ internal/processor/processor-steps/*.go  # cada etapa do pipeline
 
 O pipeline FFmpeg funciona end-to-end. Os bloqueadores críticos para uso real são:
 
-1. **Jobs órfãos** — se o worker travar antes de `AcknowledgeMessage`, o job fica preso em `{queue}:processing`. Falta goroutine de recuperação.
+1. **Sem notificação push** — a API precisa de polling em `queue.GetJobState(videoID)`. Falta webhook/callback (C3).
 
-2. **Sem notificação push** — a API precisa de polling em `queue.GetJobState(videoID)`. Falta webhook/callback.
-
-3. **Falhas silenciosas** — quando o pipeline falha, nada é publicado. A API nunca fica sabendo.
-
-4. **Resolução única** — gera um MP4 só. Streaming adaptativo real precisa de 360p/480p/720p/1080p.
+2. **Resolução única** — gera um MP4 só. Streaming adaptativo real precisa de 360p/480p/720p/1080p (P1).
 
 Ver `docs/roadmap.md` para o plano completo.
 

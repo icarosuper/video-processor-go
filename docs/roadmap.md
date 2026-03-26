@@ -24,6 +24,9 @@ O pipeline FFmpeg funciona. A infraestrutura básica existe. Mas faltam as peça
 - **B5**: Deploy sem arquivo `.env` funciona
 - **C1**: Estado de job implementado (`queue/job.go`) — `pending → processing → done/failed` no Redis com TTL de 24h; artefatos gerados registrados em `done`
 - **C2**: Consumo seguro com `BRPOPLPUSH` — job movido atomicamente para fila `{queue}:processing` ao consumir; `AcknowledgeMessage` remove ao concluir; `PublishJob` cria estado `pending` no produtor
+- **C4**: Recovery de jobs órfãos — `StartRecovery` verifica a cada minuto jobs em `processing` com `updated_at` antigo e os recoloca na fila principal
+- **P2**: Retry automático — `SetJobFailed` incrementa `RetryCount`; até 3 tentativas o job é recolocado na fila; acima disso vai para DLQ
+- **P3**: Dead letter queue — `{queue}:dead` recebe jobs que esgotaram tentativas; state permanece `failed` com mensagem de erro auditável
 
 ---
 
@@ -31,15 +34,9 @@ O pipeline FFmpeg funciona. A infraestrutura básica existe. Mas faltam as peça
 
 ### C3. Falhas não chegam à API (parcialmente resolvido)
 
-O estado do job é gravado como `failed` com a mensagem de erro. Mas a API precisa de polling ativo em `GetJobState(videoID)` — não há notificação push.
+O estado do job é gravado como `failed` com a mensagem de erro e a API pode consultar via `GetJobState(videoID)`. Mas requer polling ativo — não há notificação push.
 
 **Pendente**: implementar webhook ou callback para a API não precisar fazer polling.
-
-### C4. Jobs órfãos na fila de processamento
-
-Se o worker travar antes de chamar `AcknowledgeMessage`, o job fica preso em `{queue}:processing` para sempre. O estado no Redis fica em `processing` até expirar (24h).
-
-**Solução**: goroutine de recuperação que periodicamente verifica jobs com `status=processing` e `updated_at` antigo, e os recoloca na fila principal.
 
 ---
 

@@ -46,6 +46,9 @@ func main() {
 	metrics.ActiveWorkers.Set(float64(numWorkers))
 
 	ctx, cancel := context.WithCancel(context.Background())
+
+	// Goroutine que recoloca jobs órfãos (crash durante processamento)
+	go queue.StartRecovery(ctx, 10*time.Minute)
 	defer cancel()
 
 	sigChan := make(chan os.Signal, 1)
@@ -166,8 +169,22 @@ func processNextMessage(ctx context.Context, workerID int) error {
 
 		defer func() {
 			if jobErr != nil {
-				if err := queue.SetJobFailed(videoID, jobErr); err != nil {
+				state, err := queue.SetJobFailed(videoID, jobErr)
+				if err != nil {
 					log.Warn().Err(err).Str("videoID", videoID).Msg("Falha ao atualizar estado do job para failed")
+				}
+				if state != nil && state.RetryCount <= queue.MaxJobRetries {
+					if err := queue.RequeueJob(videoID); err != nil {
+						log.Warn().Err(err).Str("videoID", videoID).Msg("Falha ao recolocar job na fila")
+					} else {
+						log.Warn().Str("videoID", videoID).Int("tentativa", state.RetryCount).Int("max", queue.MaxJobRetries).Msg("Job agendado para retry")
+					}
+				} else {
+					if err := queue.MoveToDLQ(videoID); err != nil {
+						log.Warn().Err(err).Str("videoID", videoID).Msg("Falha ao mover job para dead letter queue")
+					} else {
+						log.Error().Str("videoID", videoID).Str("erro", jobErr.Error()).Msg("Job movido para dead letter queue após esgotar tentativas")
+					}
 				}
 			}
 			if err := queue.AcknowledgeMessage(videoID); err != nil {

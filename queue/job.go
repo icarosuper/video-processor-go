@@ -16,6 +16,9 @@ const (
 	JobStatusDone       JobStatus = "done"
 	JobStatusFailed     JobStatus = "failed"
 
+	// MaxJobRetries é o número máximo de retentativas após a tentativa inicial.
+	MaxJobRetries = 3
+
 	jobTTL = 24 * time.Hour
 )
 
@@ -30,11 +33,12 @@ type JobArtifacts struct {
 
 // JobState representa o estado completo de um job de processamento.
 type JobState struct {
-	Status    JobStatus     `json:"status"`
-	Error     string        `json:"error,omitempty"`
-	Artifacts *JobArtifacts `json:"artifacts,omitempty"`
-	CreatedAt int64         `json:"created_at"`
-	UpdatedAt int64         `json:"updated_at"`
+	Status     JobStatus     `json:"status"`
+	Error      string        `json:"error,omitempty"`
+	Artifacts  *JobArtifacts `json:"artifacts,omitempty"`
+	RetryCount int           `json:"retry_count"`
+	CreatedAt  int64         `json:"created_at"`
+	UpdatedAt  int64         `json:"updated_at"`
 }
 
 func jobKey(videoID string) string {
@@ -85,15 +89,39 @@ func SetJobDone(videoID string, artifacts JobArtifacts) error {
 	return setJobState(videoID, *existing)
 }
 
-// SetJobFailed atualiza o estado do job para failed com a mensagem de erro.
-func SetJobFailed(videoID string, jobErr error) error {
+// SetJobFailed atualiza o estado do job para failed, incrementa o contador de tentativas
+// e retorna o estado atualizado para que o chamador decida entre retry e DLQ.
+func SetJobFailed(videoID string, jobErr error) (*JobState, error) {
 	existing, _ := GetJobState(videoID)
 	if existing == nil {
 		existing = &JobState{CreatedAt: time.Now().Unix()}
 	}
 	existing.Status = JobStatusFailed
 	existing.Error = jobErr.Error()
-	return setJobState(videoID, *existing)
+	existing.RetryCount++
+	if err := setJobState(videoID, *existing); err != nil {
+		return nil, err
+	}
+	return existing, nil
+}
+
+// RequeueJob recoloca o job na fila principal para reprocessamento.
+// AcknowledgeMessage ainda deve ser chamado para remover da fila de processamento.
+func RequeueJob(videoID string) error {
+	existing, _ := GetJobState(videoID)
+	if existing != nil {
+		existing.Status = JobStatusPending
+		if err := setJobState(videoID, *existing); err != nil {
+			return fmt.Errorf("erro ao atualizar estado para requeue: %w", err)
+		}
+	}
+	return client.LPush(context.Background(), cfg.ProcessingRequestQueue, videoID).Err()
+}
+
+// MoveToDLQ move o job para a dead letter queue após esgotar as tentativas.
+// AcknowledgeMessage ainda deve ser chamado para remover da fila de processamento.
+func MoveToDLQ(videoID string) error {
+	return client.LPush(context.Background(), deadLetterQueueName(), videoID).Err()
 }
 
 // GetJobState retorna o estado atual de um job. Retorna nil se o job não existir.

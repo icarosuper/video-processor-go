@@ -147,8 +147,6 @@ go run main.go
 docker-compose up -d
 ```
 
-> **Atenção**: o serviço `worker` no `docker-compose.yml` atual está sem as variáveis obrigatórias `PROCESSING_REQUEST_QUEUE`, `PROCESSING_FINISHED_QUEUE` e `MINIO_BUCKET_NAME`. Ver [Problemas Conhecidos](#problemas-conhecidos).
-
 ## Fluxo de Processamento
 
 ```
@@ -156,48 +154,25 @@ docker-compose up -d
 2. Worker consome via BLPop
 3. Worker baixa raw/{VideoID} do MinIO
 4. Pipeline executa as 7 etapas
-5. Worker faz upload processed/{VideoID}_processed para MinIO
+5. Worker faz upload de todos os artefatos ao MinIO:
+   - processed/{VideoID}_processed       (vídeo transcodificado)
+   - thumbnails/{VideoID}/thumb_00N.jpg  (5 frames)
+   - audio/{VideoID}.mp3
+   - preview/{VideoID}_preview.mp4
+   - hls/{VideoID}/playlist.m3u8 + segment_*.ts
 6. Worker publica VideoID → PROCESSING_FINISHED_QUEUE
 ```
 
-## Problemas Conhecidos
+## Limitações Atuais
 
-Estes são bugs identificados que ainda não foram corrigidos.
+O sistema está funcional para o fluxo básico, mas ainda não está pronto para produção. Os bloqueadores principais são:
 
-### 1. Workers travam no shutdown
+- **Sem estado de job**: a API não sabe se um vídeo está processando, terminou ou falhou
+- **BLPop destrutivo**: crash durante o processamento = job perdido
+- **Resolução única**: gera um MP4 só; streaming adaptativo precisa de múltiplas qualidades
+- **Falhas silenciosas**: jobs que falham não notificam a API
 
-`queue.ConsumeMessage()` usa `BLPop` com um `context.Background()` global, ignorando o contexto de cancelamento passado pelos workers. Ao receber SIGTERM, os workers ficam bloqueados no BLPop até a próxima mensagem chegar ou o timeout de 30s forçar o encerramento.
-
-**Arquivo**: `queue/client.go:35`
-**Impacto**: Shutdown não é verdadeiramente gracioso.
-
-### 2. Artefatos das etapas 4–7 são descartados
-
-Thumbnails, áudio extraído, preview e segmentos HLS são gerados em `tempDir`, mas o `defer os.RemoveAll(tempDir)` apaga tudo antes de qualquer upload. Nenhum desses artefatos chega ao MinIO.
-
-**Arquivo**: `internal/processor/processor.go:26`
-**Impacto**: As etapas 4, 5, 6 e 7 do pipeline não têm efeito real.
-
-### 3. `docker-compose.yml` — worker falha na inicialização
-
-O serviço `worker` não define `PROCESSING_REQUEST_QUEUE`, `PROCESSING_FINISHED_QUEUE` e `MINIO_BUCKET_NAME`, que são marcadas como `notEmpty` no config. O container falha ao subir.
-
-**Arquivo**: `docker-compose.yml`
-**Impacto**: `docker-compose up` não funciona end-to-end.
-
-### 4. Senha MinIO exposta em log
-
-`config.LoadConfig()` usa `fmt.Printf("Config loaded successfully: %+v\n", cfg)`, que imprime `MinioRootPassword` em texto puro no stdout.
-
-**Arquivo**: `config/config.go:60`
-**Impacto**: Vazamento de credenciais em logs.
-
-### 5. `godotenv.Load()` com Fatal
-
-Se não existir arquivo `.env` (produção com env vars injetadas), o processo morre com `unable to load .env file`. O erro deveria ser ignorado quando o arquivo não existir.
-
-**Arquivo**: `config/config.go:49`
-**Impacto**: Impossível rodar em Docker/Kubernetes sem um `.env` em disco.
+Ver o plano completo em [roadmap.md](./roadmap.md).
 
 ## Considerações Operacionais
 
@@ -209,5 +184,5 @@ Se não existir arquivo `.env` (produção com env vars injetadas), o processo m
 ---
 
 **Versão**: 0.1.0
-**Status**: Funcional (pipeline básico) — com bugs conhecidos documentados acima
-**Última Atualização**: 2026-03-25
+**Status**: Pipeline funcional — bloqueadores de produção documentados no roadmap
+**Última Atualização**: 2026-03-26

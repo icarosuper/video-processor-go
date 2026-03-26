@@ -1,72 +1,112 @@
 # Roadmap - Video Processor Go
 
-## Status Atual
+## Objetivo do Projeto
 
-O pipeline de processamento está implementado e funcional para o fluxo básico (download → transcodificação → upload). Existem bugs conhecidos que precisam ser corrigidos antes de avançar com novas features.
+Worker assíncrono que uma API chama para processar vídeos enviados por usuários (modelo YouTube): recebe um `videoID`, processa em pipeline de 7 etapas com FFmpeg, e entrega os artefatos no MinIO.
 
----
+## Status Atual: ~30% pronto para produção
 
-## Bugs a Corrigir (Prioridade Alta)
-
-### B1. Workers travam no shutdown
-`ConsumeMessage()` usa `context.Background()` global em vez do contexto passado pelo worker. Ao cancelar o contexto no shutdown, o BLPop não é interrompido.
-
-**Solução**: `ConsumeMessage(ctx context.Context)` passando o contexto do worker.
-
-### B2. Artefatos gerados não são enviados ao MinIO
-Thumbnails, áudio, preview e HLS são gerados em `tempDir` mas apagados pelo `defer os.RemoveAll` sem upload. As etapas 4–7 do pipeline não têm efeito real.
-
-**Solução**: Fazer upload dos artefatos para MinIO com prefixos adequados (ex: `thumbnails/`, `audio/`, `preview/`, `hls/`) antes da limpeza do `tempDir`.
-
-### B3. `docker-compose.yml` com env vars faltando
-O serviço `worker` não define `PROCESSING_REQUEST_QUEUE`, `PROCESSING_FINISHED_QUEUE` e `MINIO_BUCKET_NAME`.
-
-**Solução**: Adicionar as variáveis faltantes no `docker-compose.yml`.
-
-### B4. Senha exposta em log
-`fmt.Printf("Config loaded: %+v", cfg)` imprime `MinioRootPassword` em plaintext.
-
-**Solução**: Remover ou mascarar o print de configuração.
-
-### B5. `godotenv.Load()` com Fatal sem `.env`
-O processo falha se não houver arquivo `.env`, impossibilitando deploy sem ele.
-
-**Solução**: Tratar o erro do `godotenv.Load()` como warning quando o arquivo não existir (`os.IsNotExist`).
+O pipeline FFmpeg funciona. A infraestrutura básica existe. Mas faltam as peças que tornam o sistema **confiável e integrável** com uma API real.
 
 ---
 
-## Melhorias de Médio Prazo
+## ✅ Concluído
 
-### Resiliência
-- **Retry com exponential backoff**: reprocessar mensagens que falharam transitoriamente
-- **Dead Letter Queue**: mover mensagens com falhas permanentes para uma fila separada
-- **Circuit breaker**: proteger chamadas ao MinIO e Redis de falhas em cascata
-- **Timeout por etapa**: hoje o timeout de 5 minutos é global; cada etapa deveria ter seu próprio limite
+- Pipeline de 7 etapas com FFmpeg (validação, transcodificação, thumbnails, áudio, preview, HLS)
+- Upload de todos os artefatos ao MinIO (thumbnails, áudio, preview, segmentos HLS)
+- Workers concorrentes com graceful shutdown funcional
+- Métricas Prometheus, health check, logging estruturado
+- Testes unitários (88.2% no pipeline) e de integração (testcontainers)
+- **B1**: Workers não travavam mais no shutdown — `ConsumeMessage(ctx)`
+- **B2**: Artefatos das etapas 4–7 agora chegam ao MinIO
+- **B3**: `docker-compose.yml` com todas as env vars obrigatórias
+- **B4**: Senha MinIO não é mais impressa em log
+- **B5**: Deploy sem arquivo `.env` funciona
+
+---
+
+## 🔴 Crítico — Bloqueadores para uso em produção
+
+Sem esses itens a API não consegue integrar de forma confiável.
+
+### C1. Estado de job (maior gap)
+
+Hoje a API publica um `videoID` no Redis e nunca mais sabe o que aconteceu. Não existe estado PENDING → PROCESSING → DONE/FAILED.
+
+**Impacto**: a API não pode responder ao usuário "seu vídeo está processando" nem "falhou por este motivo".
+
+**Solução**: ao consumir um job, gravar estado no Redis Hash (`job:{videoID}` com campos `status`, `error`, `artifacts`). Atualizar ao longo do pipeline. A API consulta esse hash para polling ou para disparar webhook.
+
+### C2. Jobs perdidos em caso de crash (BLPop destrutivo)
+
+`BLPop` remove a mensagem da fila imediatamente ao consumir. Se o worker travar durante o processamento, o job some — não há como reprocessar.
+
+**Solução**: usar `BRPOPLPUSH` para mover o job para uma fila de "em progresso" ao consumir, e só remover após confirmação de conclusão. Jobs que ficam presos nessa fila por mais de X minutos são recolocados na fila principal.
+
+### C3. Falhas não chegam à API
+
+Quando o processamento falha, nada é publicado na fila de sucesso. A API não sabe que o job falhou, nunca notifica o usuário.
+
+**Solução**: publicar na fila de resultado independente de sucesso ou falha, com campo `status` e `error`. Ou usar o estado de job do C1.
+
+---
+
+## 🟠 Importante — Necessário para qualidade de produto
+
+### P1. Múltiplas resoluções de saída
+
+Hoje gera um único MP4 transcodificado. Para streaming adaptativo funcionar, precisa de múltiplas qualidades: 360p, 480p, 720p e 1080p (quando o original permitir). O HLS gerado hoje usa resolução única.
+
+**Solução**: etapa de transcodificação gerar múltiplos outputs; playlist HLS master referenciando cada qualidade.
+
+### P2. Retry com exponential backoff
+
+Falha transitória (MinIO instável por 2s, FFmpeg com OOM) descarta o job permanentemente. Deveria tentar N vezes antes de mover para dead letter queue.
+
+### P3. Dead Letter Queue
+
+Jobs com falha permanente (arquivo corrompido, codec não suportado) precisam de um destino auditável, não simplesmente desaparecer.
+
+### P4. Persistência de metadados do vídeo
+
+A etapa de análise extrai duração, codec, resolução, bitrate — mas só loga. Esses dados deveriam ser gravados junto ao estado do job (C1) para a API devolver ao usuário.
+
+### P5. Validação de entrada mais rigorosa
+
+Hoje qualquer arquivo passa para o FFmpeg. Falta:
+- Limite de tamanho de arquivo (ex: 5GB max)
+- Whitelist de codecs/containers aceitos
+- Verificação de que o arquivo não é malicioso antes de processar
+
+---
+
+## 🟡 Melhorias — Qualidade operacional
 
 ### Observabilidade
-- **Métrica `active_workers` real**: hoje é um valor estático setado no startup; deveria refletir workers em processamento vs. ociosos
-- **Métrica `queue_size` populada**: `QueueSize` existe mas nunca é atualizada
-- **Dashboard Grafana**: configuração pronta para uso com as queries documentadas em `OBSERVABILITY.md`
-- **`video_size_bytes`**: métrica existe mas não é registrada em nenhum ponto do código
+- `active_workers`: valor estático no startup, nunca atualizado
+- `queue_size`: métrica existe mas nunca é populada
+- `video_size_bytes`: métrica existe mas nunca é registrada
+- Tracing distribuído por job (OpenTelemetry) para ver tempo por etapa em produção
+
+### Resiliência
+- **Circuit breaker**: proteger chamadas ao MinIO e Redis de falhas em cascata
+- **Timeout por etapa**: hoje o timeout de 5 minutos é global; etapas críticas deveriam ter limites individuais
 
 ### Configuração
-- **SSL MinIO configurável**: `useSsl` hardcoded como `false`; expor via env var `MINIO_USE_SSL`
-- **Porta HTTP configurável**: `:8080` hardcoded em `main.go`
-
-### Código
-- **`config.validate()`**: método definido mas nunca chamado — remover ou integrar ao `LoadConfig()`
+- **SSL MinIO**: `useSsl` hardcoded como `false`; expor via env var `MINIO_USE_SSL`
+- **Porta HTTP**: `:8080` hardcoded em `main.go`
 - **`go-redis/v8` → `v9`**: versão mais recente com melhor suporte a context
 
 ---
 
-## Features de Longo Prazo
+## 🔵 Longo Prazo — Escalabilidade e features avançadas
 
-- API REST para submissão de vídeos (hoje requer publicar diretamente no Redis)
-- Webhooks para notificação de conclusão
-- Suporte a múltiplos formatos de output configuráveis por job
-- Auto-scaling baseado no tamanho da fila
-- Tracing distribuído com OpenTelemetry
+- **Webhooks**: notificar a API quando o processamento terminar, sem polling
+- **Auto-scaling**: aumentar workers baseado no tamanho da fila
+- **Escala horizontal**: múltiplas instâncias do worker em máquinas diferentes
+- **Priorização de fila**: vídeos curtos na frente, vídeos longos em fila separada
+- **Dashboard Grafana**: configuração pronta para uso
 
 ---
 
-**Última Atualização**: 2026-03-25
+**Última Atualização**: 2026-03-26

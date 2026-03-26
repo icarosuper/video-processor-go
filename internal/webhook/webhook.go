@@ -22,6 +22,8 @@ type Payload struct {
 
 var httpClient = &http.Client{Timeout: 10 * time.Second}
 
+var sleepFn = time.Sleep
+
 // Notify envia o payload ao callbackURL com até 3 tentativas e backoff exponencial.
 // Se secret não for vazio, assina o body com HMAC-SHA256 no header X-Webhook-Signature.
 // Retorna erro apenas se todas as tentativas falharem.
@@ -36,7 +38,7 @@ func Notify(callbackURL, secret string, payload Payload) error {
 		if err := send(callbackURL, secret, body); err != nil {
 			lastErr = err
 			if attempt < 3 {
-				time.Sleep(time.Duration(attempt*attempt) * time.Second)
+				sleepFn(time.Duration(attempt*attempt) * time.Second)
 			}
 			continue
 		}

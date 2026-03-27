@@ -11,15 +11,20 @@ import (
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/minio/minio-go/v7/pkg/lifecycle"
 	"github.com/rs/zerolog/log"
 )
 
 type VideoType string
 
 const (
-	VideoTypeRaw       VideoType = "raw"
-	VideoTypeProcessed VideoType = "processed"
+	VideoTypeRaw        VideoType = "raw"
+	VideoTypeProcessed  VideoType = "processed"
+	VideoTypeRawArchived VideoType = "raw-archived"
 )
+
+// rawArchivedLifecycleDays é o número de dias que os raws arquivados ficam retidos antes de serem deletados.
+const rawArchivedLifecycleDays = 30
 
 var (
 	client *minio.Client
@@ -54,6 +59,33 @@ func InitMinioClient(config *config.Config) {
 			log.Fatal().Err(err).Str("bucket", cfg.MinioBucketName).Msg("Erro ao criar bucket")
 		}
 		log.Info().Str("bucket", cfg.MinioBucketName).Msg("Bucket criado com sucesso")
+	}
+
+	configureRawArchivedLifecycle()
+}
+
+// configureRawArchivedLifecycle configura a lifecycle rule que deleta automaticamente
+// objetos em raw-archived/ após rawArchivedLifecycleDays dias.
+func configureRawArchivedLifecycle() {
+	ctx := context.Background()
+	prefix := string(VideoTypeRawArchived) + "/"
+	lcConfig := lifecycle.NewConfiguration()
+	lcConfig.Rules = []lifecycle.Rule{
+		{
+			ID:     "expire-raw-archived",
+			Status: "Enabled",
+			RuleFilter: lifecycle.Filter{
+				Prefix: prefix,
+			},
+			Expiration: lifecycle.Expiration{
+				Days: lifecycle.ExpirationDays(rawArchivedLifecycleDays),
+			},
+		},
+	}
+	if err := client.SetBucketLifecycle(ctx, cfg.MinioBucketName, lcConfig); err != nil {
+		log.Warn().Err(err).Msg("Falha ao configurar lifecycle rule para raw-archived")
+	} else {
+		log.Info().Int("days", rawArchivedLifecycleDays).Str("prefix", prefix).Msg("Lifecycle rule configurada para raw-archived")
 	}
 }
 
@@ -202,6 +234,35 @@ func contentTypeByExt(ext string) string {
 	default:
 		return "application/octet-stream"
 	}
+}
+
+// ArchiveRawVideo move o raw de raw/videoID para raw-archived/videoID e deleta o original.
+// O objeto em raw-archived/ será deletado automaticamente após rawArchivedLifecycleDays dias.
+func ArchiveRawVideo(videoID string) error {
+	_, err := circuitbreaker.MinIO.Execute(func() (interface{}, error) {
+		return nil, archiveRawVideo(videoID)
+	})
+	return err
+}
+
+func archiveRawVideo(videoID string) error {
+	ctx := context.Background()
+	srcPath := getObjectPath(VideoTypeRaw, videoID)
+	dstPath := getObjectPath(VideoTypeRawArchived, videoID)
+
+	// CopyObject no MinIO é a forma de "mover" — não há operação nativa de rename
+	src := minio.CopySrcOptions{Bucket: cfg.MinioBucketName, Object: srcPath}
+	dst := minio.CopyDestOptions{Bucket: cfg.MinioBucketName, Object: dstPath}
+	if _, err := client.CopyObject(ctx, dst, src); err != nil {
+		return fmt.Errorf("erro ao copiar raw para arquivo: %w", err)
+	}
+
+	if err := client.RemoveObject(ctx, cfg.MinioBucketName, srcPath, minio.RemoveObjectOptions{}); err != nil {
+		return fmt.Errorf("erro ao remover raw original após arquivamento: %w", err)
+	}
+
+	log.Info().Str("src", srcPath).Str("dst", dstPath).Int("expire_days", rawArchivedLifecycleDays).Msg("Raw arquivado com sucesso")
+	return nil
 }
 
 // HealthCheck verifica se o cliente MinIO está saudável

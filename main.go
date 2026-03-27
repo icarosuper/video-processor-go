@@ -268,6 +268,12 @@ func processNextMessage(ctx context.Context, workerID int, cfg *config.Config) e
 			return
 		}
 
+		// Arquiva o raw original para raw-archived/ (será deletado automaticamente após 30 dias).
+		// Erro não é fatal — o vídeo já foi processado e os artefatos estão no MinIO.
+		if err := minio.ArchiveRawVideo(videoID); err != nil {
+			log.Warn().Err(err).Str("videoID", videoID).Msg("Falha ao arquivar raw — será retido em raw/")
+		}
+
 		// Upload dos artefatos opcionais gerados pelo pipeline
 		if result.ThumbnailsDir != "" {
 			if err := minio.UploadDirectory(result.ThumbnailsDir, "thumbnails/"+videoID); err != nil {

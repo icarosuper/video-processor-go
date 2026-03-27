@@ -8,37 +8,37 @@ import (
 	"github.com/sony/gobreaker"
 )
 
-var errFalha = errors.New("falha simulada")
+var errFailure = errors.New("simulated failure")
 
-func TestMinIO_EstadoInicial_Fechado(t *testing.T) {
-	chamadas := 0
+func TestMinIO_InitialState_Closed(t *testing.T) {
+	calls := 0
 	_, err := MinIO.Execute(func() (interface{}, error) {
-		chamadas++
+		calls++
 		return nil, nil
 	})
 	if err != nil {
-		t.Fatalf("circuito MinIO deveria estar fechado, mas retornou erro: %v", err)
+		t.Fatalf("MinIO circuit should be closed, but returned error: %v", err)
 	}
-	if chamadas != 1 {
-		t.Fatalf("esperava 1 chamada, got %d", chamadas)
+	if calls != 1 {
+		t.Fatalf("expected 1 call, got %d", calls)
 	}
 }
 
-func TestRedis_EstadoInicial_Fechado(t *testing.T) {
-	chamadas := 0
+func TestRedis_InitialState_Closed(t *testing.T) {
+	calls := 0
 	_, err := Redis.Execute(func() (interface{}, error) {
-		chamadas++
+		calls++
 		return nil, nil
 	})
 	if err != nil {
-		t.Fatalf("circuito Redis deveria estar fechado, mas retornou erro: %v", err)
+		t.Fatalf("Redis circuit should be closed, but returned error: %v", err)
 	}
-	if chamadas != 1 {
-		t.Fatalf("esperava 1 chamada, got %d", chamadas)
+	if calls != 1 {
+		t.Fatalf("expected 1 call, got %d", calls)
 	}
 }
 
-func TestCircuitBreaker_AbreApos5FalhasConsecutivas(t *testing.T) {
+func TestCircuitBreaker_OpensAfter5ConsecutiveFailures(t *testing.T) {
 	cb := gobreaker.NewCircuitBreaker(gobreaker.Settings{
 		Name:        "test-minio",
 		MaxRequests: 1,
@@ -51,16 +51,16 @@ func TestCircuitBreaker_AbreApos5FalhasConsecutivas(t *testing.T) {
 
 	for i := 0; i < 5; i++ {
 		cb.Execute(func() (interface{}, error) { //nolint:errcheck
-			return nil, errFalha
+			return nil, errFailure
 		})
 	}
 
 	if cb.State() != gobreaker.StateOpen {
-		t.Fatalf("circuito deveria estar aberto após 5 falhas, estado: %s", cb.State())
+		t.Fatalf("circuit should be open after 5 failures, state: %s", cb.State())
 	}
 }
 
-func TestCircuitBreaker_AbreApos3FalhasConsecutivas_Redis(t *testing.T) {
+func TestCircuitBreaker_OpensAfter3ConsecutiveFailures_Redis(t *testing.T) {
 	cb := gobreaker.NewCircuitBreaker(gobreaker.Settings{
 		Name:        "test-redis",
 		MaxRequests: 1,
@@ -73,16 +73,16 @@ func TestCircuitBreaker_AbreApos3FalhasConsecutivas_Redis(t *testing.T) {
 
 	for i := 0; i < 3; i++ {
 		cb.Execute(func() (interface{}, error) { //nolint:errcheck
-			return nil, errFalha
+			return nil, errFailure
 		})
 	}
 
 	if cb.State() != gobreaker.StateOpen {
-		t.Fatalf("circuito Redis deveria estar aberto após 3 falhas, estado: %s", cb.State())
+		t.Fatalf("Redis circuit should be open after 3 failures, state: %s", cb.State())
 	}
 }
 
-func TestCircuitBreaker_RejeitaChamadasQuandoAberto(t *testing.T) {
+func TestCircuitBreaker_RejectsCallsWhenOpen(t *testing.T) {
 	cb := gobreaker.NewCircuitBreaker(gobreaker.Settings{
 		Name:        "test-open",
 		MaxRequests: 1,
@@ -95,7 +95,7 @@ func TestCircuitBreaker_RejeitaChamadasQuandoAberto(t *testing.T) {
 
 	for i := 0; i < 3; i++ {
 		cb.Execute(func() (interface{}, error) { //nolint:errcheck
-			return nil, errFalha
+			return nil, errFailure
 		})
 	}
 
@@ -104,13 +104,13 @@ func TestCircuitBreaker_RejeitaChamadasQuandoAberto(t *testing.T) {
 	})
 
 	if !errors.Is(err, gobreaker.ErrOpenState) {
-		t.Fatalf("esperava ErrOpenState, got: %v", err)
+		t.Fatalf("expected ErrOpenState, got: %v", err)
 	}
 }
 
-func TestCircuitBreaker_NaoAbreComFalhasNaoConsecutivas(t *testing.T) {
+func TestCircuitBreaker_DoesNotOpenWithNonConsecutiveFailures(t *testing.T) {
 	cb := gobreaker.NewCircuitBreaker(gobreaker.Settings{
-		Name:        "test-intermitente",
+		Name:        "test-intermittent",
 		MaxRequests: 1,
 		Interval:    30 * time.Second,
 		Timeout:     60 * time.Second,
@@ -119,10 +119,10 @@ func TestCircuitBreaker_NaoAbreComFalhasNaoConsecutivas(t *testing.T) {
 		},
 	})
 
-	// 4 falhas intercaladas com 1 sucesso — não deve abrir
+	// 4 failures interleaved with 1 success — should not open
 	for i := 0; i < 4; i++ {
 		cb.Execute(func() (interface{}, error) { //nolint:errcheck
-			return nil, errFalha
+			return nil, errFailure
 		})
 		cb.Execute(func() (interface{}, error) { //nolint:errcheck
 			return "ok", nil
@@ -130,23 +130,23 @@ func TestCircuitBreaker_NaoAbreComFalhasNaoConsecutivas(t *testing.T) {
 	}
 
 	if cb.State() != gobreaker.StateClosed {
-		t.Fatalf("circuito não deveria abrir com falhas não consecutivas, estado: %s", cb.State())
+		t.Fatalf("circuit should not open with non-consecutive failures, state: %s", cb.State())
 	}
 }
 
-func TestCircuitBreaker_RetornaResultadoQuandoFechado(t *testing.T) {
+func TestCircuitBreaker_ReturnsResultWhenClosed(t *testing.T) {
 	cb := gobreaker.NewCircuitBreaker(gobreaker.Settings{
-		Name: "test-resultado",
+		Name: "test-result",
 	})
 
-	resultado, err := cb.Execute(func() (interface{}, error) {
-		return "valor-esperado", nil
+	result, err := cb.Execute(func() (interface{}, error) {
+		return "expected-value", nil
 	})
 
 	if err != nil {
-		t.Fatalf("não esperava erro: %v", err)
+		t.Fatalf("did not expect error: %v", err)
 	}
-	if resultado != "valor-esperado" {
-		t.Fatalf("esperava 'valor-esperado', got: %v", resultado)
+	if result != "expected-value" {
+		t.Fatalf("expected 'expected-value', got: %v", result)
 	}
 }

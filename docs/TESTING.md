@@ -1,38 +1,38 @@
-# Testes - VidroProcessor
+# Testing - VidroProcessor
 
-## Cobertura Atual
+## Current Coverage
 
-| Pacote | Cobertura | Tipo |
+| Package | Coverage | Type |
 |---|---|---|
-| `internal/processor/processor-steps` | 63.7% | Unitários |
-| `metrics` | ~100% | Unitários |
-| `internal/circuitbreaker` | ~100% | Unitários |
-| `internal/webhook` | ~100% | Unitários |
-| `internal/telemetry` | ~100% | Unitários |
-| `test/integration` | — | Integração |
+| `internal/processor/processor-steps` | 63.7% | Unit |
+| `metrics` | ~100% | Unit |
+| `internal/circuitbreaker` | ~100% | Unit |
+| `internal/webhook` | ~100% | Unit |
+| `internal/telemetry` | ~100% | Unit |
+| `test/integration` | — | Integration |
 
-**Pacotes sem testes**: `main`, `config`, `queue`, `minio`
+**Packages without tests**: `main`, `config`, `queue`, `minio`
 
 ---
 
-## Executando os Testes
+## Running Tests
 
 ```bash
-# Todos os testes
+# All tests
 go test ./...
 
-# Com cobertura
+# With coverage
 go test ./... -cover
 
-# Saída detalhada
+# Verbose output
 go test -v ./...
 
-# Relatório HTML
+# HTML report
 go test ./... -coverprofile=coverage.out
 go tool cover -html=coverage.out
 ```
 
-### Por pacote
+### By package
 
 ```bash
 go test -v ./internal/processor/processor-steps/...
@@ -40,9 +40,9 @@ go test -v ./metrics/...
 go test -v ./test/integration/... -timeout 10m
 ```
 
-### Testes de integração
+### Integration tests
 
-Requerem Docker. São pulados automaticamente se Docker não estiver disponível.
+Require Docker. Automatically skipped if Docker is not available.
 
 ```bash
 go test -v ./test/integration/... -timeout 10m
@@ -50,7 +50,7 @@ go test -v ./test/integration/... -timeout 10m
 
 ---
 
-## Testes Unitários
+## Unit Tests
 
 ### `validate_test.go`
 - `TestValidateVideo_ValidVideo`
@@ -59,12 +59,12 @@ go test -v ./test/integration/... -timeout 10m
 - `TestValidateVideo_EmptyFile`
 
 ### `transcode_test.go`
-- `TestTranscodeVideo_ValidVideo` — verifica arquivo de saída criado e não vazio
+- `TestTranscodeVideo_ValidVideo` — checks output file was created and is non-empty
 - `TestTranscodeVideo_InvalidInput`
 - `TestTranscodeVideo_NonExistentInput`
 
 ### `thumbnail_test.go`
-- `TestGenerateThumbnails_ValidVideo` — verifica 5 arquivos `thumb_00N.jpg`
+- `TestGenerateThumbnails_ValidVideo` — checks 5 `thumb_00N.jpg` files
 - `TestGenerateThumbnails_InvalidVideo`
 - `TestGenerateThumbnails_NonExistentVideo`
 
@@ -81,74 +81,74 @@ go test -v ./test/integration/... -timeout 10m
 - `TestQueueSize_SetAndGet`
 
 ### `internal/circuitbreaker/circuitbreaker_test.go`
-- `TestMinIO_EstadoInicial_Fechado`
-- `TestRedis_EstadoInicial_Fechado`
-- `TestCircuitBreaker_AbreApos5FalhasConsecutivas`
-- `TestCircuitBreaker_AbreApos3FalhasConsecutivas_Redis`
-- `TestCircuitBreaker_RejeitaChamadasQuandoAberto`
-- `TestCircuitBreaker_NaoAbreComFalhasNaoConsecutivas`
-- `TestCircuitBreaker_RetornaResultadoQuandoFechado`
+- `TestMinIO_InitialState_Closed`
+- `TestRedis_InitialState_Closed`
+- `TestCircuitBreaker_OpensAfter5ConsecutiveFailures`
+- `TestCircuitBreaker_OpensAfter3ConsecutiveFailures_Redis`
+- `TestCircuitBreaker_RejectsCallsWhenOpen`
+- `TestCircuitBreaker_DoesNotOpenWithNonConsecutiveFailures`
+- `TestCircuitBreaker_ReturnsResultWhenClosed`
 
 ### `internal/webhook/webhook_test.go`
-- `TestNotify_Sucesso`
+- `TestNotify_Success`
 - `TestNotify_ContentTypeJSON`
-- `TestNotify_ComHMAC_AssinaturaCorreta`
-- `TestNotify_SemSecret_SemHeader`
-- `TestNotify_RetryEmFalha`
-- `TestNotify_ErroApos3Tentativas`
-- `TestNotify_URLInvalida`
-- `TestNotify_ServidorIndisponivel`
-- `TestPayload_SerializacaoJSON`
+- `TestNotify_WithHMAC_CorrectSignature`
+- `TestNotify_NoSecret_NoHeader`
+- `TestNotify_RetryOnFailure`
+- `TestNotify_ErrorAfter3Attempts`
+- `TestNotify_InvalidURL`
+- `TestNotify_ServerUnavailable`
+- `TestPayload_JSONSerialization`
 
 ### `internal/telemetry/telemetry_test.go`
-- `TestInit_EndpointVazio_Noop`
-- `TestInit_EndpointVazio_InstalaNoop`
-- `TestTracer_RetornaNaoNulo`
-- `TestTracer_CriaSpan`
-- `TestTracerName_Constante`
-- `TestInit_EndpointInvalido_RetornaErro`
+- `TestInit_EmptyEndpoint_Noop`
+- `TestInit_EmptyEndpoint_InstallsNoop`
+- `TestTracer_ReturnsNonNil`
+- `TestTracer_CreatesSpan`
+- `TestTracerName_Constant`
+- `TestInit_InvalidEndpoint_ReturnsError`
 
 ---
 
-## Testes de Integração (`test/integration/`)
+## Integration Tests (`test/integration/`)
 
-Usam **testcontainers-go** para subir Redis e MinIO reais.
+Use **testcontainers-go** to spin up real Redis and MinIO instances.
 
 ### `minio_test.go`
 - `TestMinIO_BucketOperations`
 - `TestMinIO_ObjectUploadDownload`
-- `TestMinIO_VideoWorkflow` — fluxo raw → processed
+- `TestMinIO_VideoWorkflow` — raw → processed flow
 - `TestMinIO_DownloadToFile`
 - `TestMinIO_NonExistentObject`
 
-### Testes do pipeline (`pipeline_test.go`)
+### Pipeline tests (`pipeline_test.go`)
 - `TestPipeline_ValidateStep`
 - `TestPipeline_TranscodeStep`
-- `TestPipeline_FullWorkflow` — Redis → download → FFmpeg → upload → fila de sucesso
+- `TestPipeline_FullWorkflow` — Redis → download → FFmpeg → upload → success queue
 - `TestPipeline_ThumbnailGeneration`
 
 ---
 
-## Helpers de Teste
+## Test Helpers
 
 ### `GenerateTestVideo(t, duration int) string`
 
-Gera um vídeo de teste via FFmpeg (640x480, H.264+AAC, sine wave 1000Hz).
-Pula o teste automaticamente se FFmpeg não estiver disponível.
+Generates a test video via FFmpeg (640x480, H.264+AAC, 1000Hz sine wave).
+Automatically skips the test if FFmpeg is not available.
 
 ```go
-videoPath := GenerateTestVideo(t, 5) // 5 segundos
+videoPath := GenerateTestVideo(t, 5) // 5 seconds
 ```
 
 ### `CreateInvalidFile(t) string`
 
-Cria um arquivo com conteúdo inválido para testes de erro.
+Creates a file with invalid content for error testing.
 
 ---
 
-## Requisitos
+## Requirements
 
-**FFmpeg** é obrigatório para os testes de processamento:
+**FFmpeg** is required for processing tests:
 
 ```bash
 # Ubuntu/Debian
@@ -158,21 +158,21 @@ sudo apt-get install ffmpeg
 brew install ffmpeg
 ```
 
-Testes que dependem de FFmpeg são pulados automaticamente com:
+Tests that depend on FFmpeg are automatically skipped with:
 ```
-FFmpeg não está disponível - pulando teste
+FFmpeg is not available - skipping test
 ```
 
 ---
 
-## O que Falta Testar
+## What's Missing
 
-- `config.LoadConfig()` — incluindo o comportamento sem `.env`
-- `queue.ConsumeMessage()` e `PublishSuccessMessage()`
-- `minio.DownloadVideo()` e `UploadVideo()`
-- `main.processNextMessage()` — lógica de orquestração dos workers
-- Etapas sem testes: `audio.go`, `preview.go`, `streaming.go`
-- Benchmark de transcodificação e throughput
+- `config.LoadConfig()` — including behavior without `.env`
+- `queue.ConsumeMessage()` and `PublishSuccessMessage()`
+- `minio.DownloadVideo()` and `UploadVideo()`
+- `main.processNextMessage()` — worker orchestration logic
+- Steps without tests: `audio.go`, `preview.go`, `streaming.go`
+- Transcoding and throughput benchmarks
 
 ---
 
@@ -196,5 +196,5 @@ jobs:
 
 ---
 
-**Última Atualização**: 2026-03-26
-**Cobertura Atual**: 63.7% (processor-steps), ~100% (metrics, circuitbreaker, webhook, telemetry)
+**Last Updated**: 2026-03-26
+**Current Coverage**: 63.7% (processor-steps), ~100% (metrics, circuitbreaker, webhook, telemetry)

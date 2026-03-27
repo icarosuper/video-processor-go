@@ -1,90 +1,90 @@
-# VidroProcessor - Documentação do Projeto
+# VidroProcessor - Project Documentation
 
-## Visão Geral
+## Overview
 
-O **VidroProcessor** é um sistema distribuído de processamento de vídeos construído em Go, utilizando uma arquitetura baseada em workers e filas de mensagens. O sistema processa vídeos de forma assíncrona e escalável através de um pipeline de 7 etapas com FFmpeg.
+**VidroProcessor** is a distributed video processing system built in Go, using a worker-based architecture with message queues. The system processes videos asynchronously and scalably through a 7-step FFmpeg pipeline.
 
-## Objetivo Principal
+## Main Goal
 
-Receber vídeos brutos, processá-los através de um pipeline de transformações (validação, transcodificação, thumbnails, áudio, preview e HLS), e armazenar os resultados no MinIO. A comunicação é desacoplada via Redis, permitindo escalabilidade horizontal.
+Receive raw videos, process them through a transformation pipeline (validation, transcoding, thumbnails, audio, preview, and HLS), and store the results in MinIO. Communication is decoupled via Redis, enabling horizontal scalability.
 
-## Arquitetura
+## Architecture
 
 ```
 ┌─────────────────┐      ┌──────────────┐      ┌──────────────┐
-│   Produtor      │──────│   Redis      │──────│   Workers    │
-│  de Vídeos      │      │    Filas     │      │  (Múltiplos) │
+│   Producer      │──────│   Redis      │──────│   Workers    │
+│   (Videos)      │      │   Queues     │      │  (Multiple)  │
 └─────────────────┘      └──────────────┘      └──────────────┘
                                                         │
                                                         ▼
                                                  ┌──────────────┐
-                                                 │  Pipeline de  │
-                                                 │ Processamento│
+                                                 │  Processing  │
+                                                 │  Pipeline    │
                                                  └──────────────┘
                                                         │
                                                         ▼
                                                  ┌──────────────┐
                                                  │    MinIO     │
-                                                 │  (Resultado) │
+                                                 │  (Results)   │
                                                  └──────────────┘
 ```
 
-### Componentes Principais
+### Main Components
 
-#### 1. Workers Concorrentes
-- Múltiplos workers processando vídeos em paralelo
-- Número configurável via `WORKER_COUNT` (padrão: número de CPUs)
-- Graceful shutdown com timeout de 30 segundos
+#### 1. Concurrent Workers
+- Multiple workers processing videos in parallel
+- Configurable count via `WORKER_COUNT` (default: number of CPUs)
+- Graceful shutdown with 30-second timeout
 
-#### 2. Pipeline de Processamento
+#### 2. Processing Pipeline
 
-7 etapas sequenciais em `internal/processor/processor-steps/`:
+7 sequential steps in `internal/processor/processor-steps/`:
 
-| Etapa | Arquivo | Obrigatória | Saída |
+| Step | File | Required | Output |
 |---|---|---|---|
-| 1. Validação | `validate.go` | Sim | — |
-| 2. Análise | `analysis.go` | Não (informativa) | metadados no log |
-| 3. Transcodificação | `transcode.go` | Sim | `*_output.mp4` |
-| 4. Thumbnails | `thumbnail.go` | Não | `thumbnails/thumb_00N.jpg` |
-| 5. Extração de Áudio | `audio.go` | Não | `audio.mp3` |
-| 6. Preview | `preview.go` | Não | `preview.mp4` |
-| 7. Streaming HLS | `streaming.go` | Não | `streaming/*.ts` + `playlist.m3u8` |
+| 1. Validation | `validate.go` | Yes | — |
+| 2. Analysis | `analysis.go` | No (informational) | metadata in log |
+| 3. Transcoding | `transcode.go` | Yes | `*_output.mp4` |
+| 4. Thumbnails | `thumbnail.go` | No | `thumbnails/thumb_00N.jpg` |
+| 5. Audio Extraction | `audio.go` | No | `audio.mp3` |
+| 6. Preview | `preview.go` | No | `preview.mp4` |
+| 7. HLS Streaming | `streaming.go` | No | `streaming/*.ts` + `playlist.m3u8` |
 
-> **Atenção**: atualmente apenas o vídeo transcodificado (etapa 3) é enviado ao MinIO. Os artefatos das etapas 4–7 são gerados em `tempDir` e descartados ao final. Ver [Problemas Conhecidos](#problemas-conhecidos).
+> **Note**: currently only the transcoded video (step 3) is sent to MinIO. Artifacts from steps 4–7 are generated in `tempDir` and discarded at the end. See [Known Issues](#known-issues).
 
-#### 3. Sistema de Filas (Redis)
+#### 3. Queue System (Redis)
 
-- **`PROCESSING_REQUEST_QUEUE`**: recebe IDs de vídeos para processar (BLPop)
-- **`PROCESSING_FINISHED_QUEUE`**: recebe IDs de vídeos processados com sucesso (LPush)
+- **`PROCESSING_REQUEST_QUEUE`**: receives video IDs to process (BLPop)
+- **`PROCESSING_FINISHED_QUEUE`**: receives successfully processed video IDs (LPush)
 
-#### 4. Armazenamento (MinIO)
+#### 4. Storage (MinIO)
 
-- Prefixo `raw/`: vídeos originais
-- Prefixo `processed/`: vídeos transcodificados
+- Prefix `raw/`: original videos
+- Prefix `processed/`: transcoded videos
 
-## Stack Tecnológica
+## Technology Stack
 
-| Componente | Tecnologia |
+| Component | Technology |
 |---|---|
-| Linguagem | Go 1.24 |
-| Filas | Redis 7 (go-redis/v8) |
-| Armazenamento | MinIO (minio-go/v7) |
-| Processamento | FFmpeg / FFprobe |
-| Métricas | Prometheus (promauto) |
+| Language | Go 1.24 |
+| Queues | Redis 7 (go-redis/v8) |
+| Storage | MinIO (minio-go/v7) |
+| Processing | FFmpeg / FFprobe |
+| Metrics | Prometheus (promauto) |
 | Logging | Zerolog |
 | Config | caarlos0/env v10 + godotenv |
 | Containers | Docker + Docker Compose |
 
-## Estrutura do Projeto
+## Project Structure
 
 ```
 VidroProcessor/
 ├── config/
-│   └── config.go                    # Gerenciamento de configurações
+│   └── config.go                    # Configuration management
 ├── internal/
 │   └── processor/
-│       ├── processor.go             # Orquestrador do pipeline
-│       └── processor-steps/        # Etapas do processamento
+│       ├── processor.go             # Pipeline orchestrator
+│       └── processor-steps/        # Processing steps
 │           ├── analysis.go
 │           ├── audio.go
 │           ├── preview.go
@@ -92,48 +92,48 @@ VidroProcessor/
 │           ├── thumbnail.go
 │           ├── transcode.go
 │           ├── validate.go
-│           ├── test_helpers.go      # Helpers para testes
+│           ├── test_helpers.go      # Test helpers
 │           └── testdata/
 ├── metrics/
-│   └── metrics.go                   # Métricas Prometheus
+│   └── metrics.go                   # Prometheus metrics
 ├── minio/
-│   └── client.go                    # Cliente MinIO
+│   └── client.go                    # MinIO client
 ├── queue/
-│   └── client.go                    # Cliente Redis
+│   └── client.go                    # Redis client
 ├── test/
-│   └── integration/                 # Testes de integração (testcontainers)
+│   └── integration/                 # Integration tests (testcontainers)
 ├── docs/
 ├── main.go
 ├── docker-compose.yml
 └── Dockerfile
 ```
 
-## Configuração
+## Configuration
 
-### Variáveis de Ambiente
+### Environment Variables
 
-| Variável | Obrigatória | Descrição |
+| Variable | Required | Description |
 |---|---|---|
-| `REDIS_HOST` | Sim | Ex: `localhost:6379` |
-| `PROCESSING_REQUEST_QUEUE` | Sim | Nome da fila de entrada |
-| `PROCESSING_FINISHED_QUEUE` | Sim | Nome da fila de sucesso |
-| `MINIO_ENDPOINT` | Sim | Ex: `localhost:9000` |
-| `MINIO_ROOT_USER` | Sim | Usuário MinIO |
-| `MINIO_ROOT_PASSWORD` | Sim | Senha MinIO |
-| `MINIO_BUCKET_NAME` | Sim | Nome do bucket |
-| `WORKER_COUNT` | Não | Padrão: `runtime.NumCPU()` |
+| `REDIS_HOST` | Yes | e.g. `localhost:6379` |
+| `PROCESSING_REQUEST_QUEUE` | Yes | Input queue name |
+| `PROCESSING_FINISHED_QUEUE` | Yes | Success queue name |
+| `MINIO_ENDPOINT` | Yes | e.g. `localhost:9000` |
+| `MINIO_ROOT_USER` | Yes | MinIO user |
+| `MINIO_ROOT_PASSWORD` | Yes | MinIO password |
+| `MINIO_BUCKET_NAME` | Yes | Bucket name |
+| `WORKER_COUNT` | No | Default: `runtime.NumCPU()` |
 
-### Observação sobre `.env`
+### Note on `.env`
 
-O `config.LoadConfig()` chama `godotenv.Load()` com `log.Fatal` caso o arquivo `.env` não exista. Em ambientes Docker/Kubernetes onde as variáveis são injetadas diretamente, isso causa falha na inicialização. Ver [Problemas Conhecidos](#problemas-conhecidos).
+`config.LoadConfig()` calls `godotenv.Load()` with `log.Fatal` if the `.env` file doesn't exist. In Docker/Kubernetes environments where variables are injected directly, this causes a startup failure. See [Known Issues](#known-issues).
 
-## Como Executar
+## How to Run
 
-### Desenvolvimento
+### Development
 
 ```bash
 cp .env-example .env
-# editar .env com suas configurações
+# edit .env with your configuration
 
 docker-compose up -d redis minio
 
@@ -141,48 +141,48 @@ go mod download
 go run main.go
 ```
 
-### Produção (Docker Compose)
+### Production (Docker Compose)
 
 ```bash
 docker-compose up -d
 ```
 
-## Fluxo de Processamento
+## Processing Flow
 
 ```
-1. Produtor publica VideoID → PROCESSING_REQUEST_QUEUE
-2. Worker consome via BLPop
-3. Worker baixa raw/{VideoID} do MinIO
-4. Pipeline executa as 7 etapas
-5. Worker faz upload de todos os artefatos ao MinIO:
-   - processed/{VideoID}_processed       (vídeo transcodificado)
+1. Producer publishes VideoID → PROCESSING_REQUEST_QUEUE
+2. Worker consumes via BLPop
+3. Worker downloads raw/{VideoID} from MinIO
+4. Pipeline executes the 7 steps
+5. Worker uploads all artifacts to MinIO:
+   - processed/{VideoID}_processed       (transcoded video)
    - thumbnails/{VideoID}/thumb_00N.jpg  (5 frames)
    - audio/{VideoID}.mp3
    - preview/{VideoID}_preview.mp4
    - hls/{VideoID}/playlist.m3u8 + segment_*.ts
-6. Worker publica VideoID → PROCESSING_FINISHED_QUEUE
+6. Worker publishes VideoID → PROCESSING_FINISHED_QUEUE
 ```
 
-## Limitações Atuais
+## Known Issues
 
-O sistema está funcional para o fluxo básico, mas ainda não está pronto para produção. Os bloqueadores principais são:
+The system is functional for the basic flow, but not yet production-ready. The main blockers are:
 
-- **Sem estado de job**: a API não sabe se um vídeo está processando, terminou ou falhou
-- **BLPop destrutivo**: crash durante o processamento = job perdido
-- **Resolução única**: gera um MP4 só; streaming adaptativo precisa de múltiplas qualidades
-- **Falhas silenciosas**: jobs que falham não notificam a API
+- **No job state**: the API doesn't know if a video is processing, finished, or failed
+- **Destructive BLPop**: crash during processing = lost job
+- **Single resolution**: generates one MP4; adaptive streaming needs multiple qualities
+- **Silent failures**: failed jobs don't notify the API
 
-Ver o plano completo em [roadmap.md](./roadmap.md).
+See the full plan in [roadmap.md](./roadmap.md).
 
-## Considerações Operacionais
+## Operational Considerations
 
-- Processamento de vídeo é CPU-intensivo; calibrar `WORKER_COUNT` conforme hardware
-- Armazenamento temporário em `/tmp`; recomendado SSD para performance
-- SSL/TLS no MinIO está hardcoded como `false`; deve ser configurável para produção
-- Logs em formato ConsoleWriter (não JSON) por padrão — trocar para JSON em produção
+- Video processing is CPU-intensive; calibrate `WORKER_COUNT` according to hardware
+- Temporary storage in `/tmp`; SSD recommended for performance
+- SSL/TLS in MinIO is hardcoded as `false`; should be configurable for production
+- Logs in ConsoleWriter format (not JSON) by default — switch to JSON in production
 
 ---
 
-**Versão**: 0.1.0
-**Status**: Pipeline funcional — bloqueadores de produção documentados no roadmap
-**Última Atualização**: 2026-03-26
+**Version**: 0.1.0
+**Status**: Pipeline functional — production blockers documented in roadmap
+**Last Updated**: 2026-03-26

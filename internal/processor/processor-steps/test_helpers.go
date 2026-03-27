@@ -7,22 +7,22 @@ import (
 	"testing"
 )
 
-// GenerateTestVideo cria um vídeo de teste usando FFmpeg para uso em testes
+// GenerateTestVideo creates a test video using FFmpeg for use in tests
 func GenerateTestVideo(t *testing.T, duration int) string {
 	t.Helper()
 
-	// Criar diretório temporário
+	// Create temporary directory
 	tempDir := t.TempDir()
 	videoPath := filepath.Join(tempDir, "test_video.mp4")
 
-	// Verificar se FFmpeg está disponível
+	// Check if FFmpeg is available
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		t.Skip("FFmpeg não está disponível - pulando teste")
+		t.Skip("FFmpeg is not available - skipping test")
 	}
 
-	// Gerar vídeo de teste com FFmpeg
-	// testsrc: gera padrão de teste visual
-	// sine: gera áudio de teste
+	// Generate test video with FFmpeg
+	// testsrc: generates a visual test pattern
+	// sine: generates test audio
 	cmd := exec.Command("ffmpeg",
 		"-f", "lavfi",
 		"-i", "testsrc=duration=5:size=640x480:rate=30",
@@ -35,27 +35,27 @@ func GenerateTestVideo(t *testing.T, duration int) string {
 		videoPath,
 	)
 
-	// Executar comando silenciosamente
+	// Run command silently
 	cmd.Stderr = nil
 	cmd.Stdout = nil
 
 	if err := cmd.Run(); err != nil {
-		t.Fatalf("Falha ao gerar vídeo de teste: %v", err)
+		t.Fatalf("Failed to generate test video: %v", err)
 	}
 
 	return videoPath
 }
 
-// CreateInvalidFile cria um arquivo inválido para testes de erro
+// CreateInvalidFile creates an invalid file for error testing
 func CreateInvalidFile(t *testing.T) string {
 	t.Helper()
 
 	tempDir := t.TempDir()
 	invalidPath := filepath.Join(tempDir, "invalid.mp4")
 
-	// Criar arquivo com conteúdo inválido
+	// Create file with invalid content
 	if err := os.WriteFile(invalidPath, []byte("not a valid video"), 0644); err != nil {
-		t.Fatalf("Falha ao criar arquivo inválido: %v", err)
+		t.Fatalf("Failed to create invalid file: %v", err)
 	}
 
 	return invalidPath

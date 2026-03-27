@@ -1,8 +1,8 @@
-// Package telemetry inicializa o tracing distribuído com OpenTelemetry.
+// Package telemetry initializes distributed tracing with OpenTelemetry.
 //
-// Se OTEL_ENDPOINT não estiver configurado, um tracer no-op é usado
-// e nenhuma dependência de rede é criada — zero overhead em produção
-// sem Jaeger/OTLP configurado.
+// If OTEL_ENDPOINT is not configured, a no-op tracer is used
+// and no network dependency is created — zero overhead in production
+// without Jaeger/OTLP configured.
 package telemetry
 
 import (
@@ -21,8 +21,8 @@ import (
 
 const TracerName = "video-processor"
 
-// Init inicializa o provider de tracing e retorna uma função de shutdown.
-// Se endpoint estiver vazio, instala um tracer no-op e retorna imediatamente.
+// Init initializes the tracing provider and returns a shutdown function.
+// If endpoint is empty, installs a no-op tracer and returns immediately.
 func Init(ctx context.Context, serviceName, endpoint string) (shutdown func(context.Context) error, err error) {
 	if endpoint == "" {
 		otel.SetTracerProvider(noop.NewTracerProvider())
@@ -34,14 +34,14 @@ func Init(ctx context.Context, serviceName, endpoint string) (shutdown func(cont
 		otlptracehttp.WithInsecure(),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("erro ao criar exporter OTLP: %w", err)
+		return nil, fmt.Errorf("failed to create OTLP exporter: %w", err)
 	}
 
 	res, err := resource.New(ctx,
 		resource.WithAttributes(semconv.ServiceName(serviceName)),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("erro ao criar resource OTel: %w", err)
+		return nil, fmt.Errorf("failed to create OTel resource: %w", err)
 	}
 
 	tp := sdktrace.NewTracerProvider(
@@ -59,7 +59,7 @@ func Init(ctx context.Context, serviceName, endpoint string) (shutdown func(cont
 	}, nil
 }
 
-// Tracer retorna o tracer do pacote para criação de spans.
+// Tracer returns the package tracer for creating spans.
 func Tracer() trace.Tracer {
 	return otel.Tracer(TracerName)
 }

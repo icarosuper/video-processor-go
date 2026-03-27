@@ -27,9 +27,9 @@ func InitRedisClient(configs *config.Config) {
 	})
 
 	if err := client.Ping(context.Background()).Err(); err != nil {
-		log.Fatal().Err(err).Msg("Erro ao conectar cliente Redis")
+		log.Fatal().Err(err).Msg("Failed to connect Redis client")
 	}
-	log.Info().Str("host", cfg.RedisHost).Msg("Cliente Redis conectado com sucesso")
+	log.Info().Str("host", cfg.RedisHost).Msg("Redis client connected successfully")
 }
 
 func processingQueueName() string {
@@ -40,8 +40,8 @@ func deadLetterQueueName() string {
 	return cfg.ProcessingRequestQueue + ":dead"
 }
 
-// ConsumeMessage bloqueia até receber uma mensagem da fila ou o ctx ser cancelado.
-// Usa BRPOPLPUSH para mover o job atomicamente para a fila de processamento.
+// ConsumeMessage blocks until a message is received from the queue or ctx is canceled.
+// Uses BRPOPLPUSH to atomically move the job to the processing queue.
 func ConsumeMessage(ctx context.Context) (*Message, error) {
 	result, err := circuitbreaker.Redis.Execute(func() (interface{}, error) {
 		videoID, err := client.BRPopLPush(ctx, cfg.ProcessingRequestQueue, processingQueueName(), 0).Result()
@@ -56,7 +56,7 @@ func ConsumeMessage(ctx context.Context) (*Message, error) {
 	return result.(*Message), nil
 }
 
-// AcknowledgeMessage remove o job da fila de processamento após conclusão (sucesso ou falha).
+// AcknowledgeMessage removes the job from the processing queue after completion (success or failure).
 func AcknowledgeMessage(videoID string) error {
 	_, err := circuitbreaker.Redis.Execute(func() (interface{}, error) {
 		return nil, client.LRem(context.Background(), processingQueueName(), 1, videoID).Err()
@@ -71,12 +71,12 @@ func PublishSuccessMessage(videoID string) error {
 	return err
 }
 
-// StartRecovery inicia uma goroutine que periodicamente verifica a fila de
-// processamento e recoloca na fila principal jobs que ficaram presos (crash do worker).
+// StartRecovery starts a goroutine that periodically checks the processing queue
+// and re-queues stuck jobs (worker crash) back to the main queue.
 func StartRecovery(ctx context.Context, stuckTimeout time.Duration) {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
-	log.Info().Dur("stuck_timeout", stuckTimeout).Msg("Recovery de jobs órfãos iniciado")
+	log.Info().Dur("stuck_timeout", stuckTimeout).Msg("Orphan job recovery started")
 	for {
 		select {
 		case <-ctx.Done():
@@ -90,7 +90,7 @@ func StartRecovery(ctx context.Context, stuckTimeout time.Duration) {
 func recoverStuckJobs(stuckTimeout time.Duration) {
 	videoIDs, err := client.LRange(context.Background(), processingQueueName(), 0, -1).Result()
 	if err != nil {
-		log.Warn().Err(err).Msg("Falha ao verificar fila de processamento para recovery")
+		log.Warn().Err(err).Msg("Failed to check processing queue for recovery")
 		return
 	}
 
@@ -104,12 +104,12 @@ func recoverStuckJobs(stuckTimeout time.Duration) {
 			continue
 		}
 
-		log.Warn().Str("videoID", videoID).Int("retry_count", state.RetryCount).Msg("Job órfão detectado, recolocando na fila")
+		log.Warn().Str("videoID", videoID).Int("retry_count", state.RetryCount).Msg("Orphan job detected, re-queuing")
 
 		state.RetryCount++
 		state.Status = JobStatusPending
 		if err := setJobState(videoID, *state); err != nil {
-			log.Warn().Err(err).Str("videoID", videoID).Msg("Falha ao atualizar estado durante recovery")
+			log.Warn().Err(err).Str("videoID", videoID).Msg("Failed to update state during recovery")
 			continue
 		}
 		client.LRem(context.Background(), processingQueueName(), 1, videoID)
@@ -117,12 +117,12 @@ func recoverStuckJobs(stuckTimeout time.Duration) {
 	}
 }
 
-// GetQueueSize retorna o número de jobs aguardando na fila de requisições.
+// GetQueueSize returns the number of jobs waiting in the request queue.
 func GetQueueSize() (int64, error) {
 	return client.LLen(context.Background(), cfg.ProcessingRequestQueue).Result()
 }
 
-// HealthCheck verifica se o cliente Redis está saudável
+// HealthCheck checks whether the Redis client is healthy.
 func HealthCheck() error {
 	return client.Ping(context.Background()).Err()
 }

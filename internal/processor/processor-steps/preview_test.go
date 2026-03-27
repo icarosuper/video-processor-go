@@ -12,19 +12,19 @@ func TestGeneratePreview_ValidVideo(t *testing.T) {
 	outputPath := filepath.Join(t.TempDir(), "preview.mp4")
 
 	if err := GeneratePreview(context.Background(), inputPath, outputPath); err != nil {
-		t.Fatalf("GeneratePreview() falhou: %v", err)
+		t.Fatalf("GeneratePreview() failed: %v", err)
 	}
 
 	info, err := os.Stat(outputPath)
 	if os.IsNotExist(err) {
-		t.Fatal("GeneratePreview() não criou o arquivo de saída")
+		t.Fatal("GeneratePreview() did not create the output file")
 	}
 	if info.Size() == 0 {
-		t.Error("GeneratePreview() criou arquivo de preview vazio")
+		t.Error("GeneratePreview() created an empty preview file")
 	}
 
 	if err := ValidateVideo(context.Background(), outputPath); err != nil {
-		t.Errorf("GeneratePreview() produziu vídeo inválido: %v", err)
+		t.Errorf("GeneratePreview() produced an invalid video: %v", err)
 	}
 }
 
@@ -33,14 +33,14 @@ func TestGeneratePreview_InvalidVideo(t *testing.T) {
 	outputPath := filepath.Join(t.TempDir(), "preview.mp4")
 
 	if err := GeneratePreview(context.Background(), invalidPath, outputPath); err == nil {
-		t.Error("GeneratePreview() deveria falhar com entrada inválida")
+		t.Error("GeneratePreview() should fail with invalid input")
 	}
 }
 
 func TestGeneratePreview_NonExistentVideo(t *testing.T) {
 	outputPath := filepath.Join(t.TempDir(), "preview.mp4")
 
-	if err := GeneratePreview(context.Background(), "/caminho/que/nao/existe.mp4", outputPath); err == nil {
-		t.Error("GeneratePreview() deveria falhar com arquivo inexistente")
+	if err := GeneratePreview(context.Background(), "/path/that/does/not/exist.mp4", outputPath); err == nil {
+		t.Error("GeneratePreview() should fail with non-existent file")
 	}
 }

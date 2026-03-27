@@ -1,10 +1,10 @@
-// Package circuitbreaker fornece circuit breakers pré-configurados para os
-// serviços externos (MinIO e Redis) usados pelo worker.
+// Package circuitbreaker provides pre-configured circuit breakers for the
+// external services (MinIO and Redis) used by the worker.
 //
-// Um circuit breaker monitora falhas consecutivas em chamadas a um serviço.
-// Quando o limiar é atingido, ele "abre" e rejeita chamadas imediatamente,
-// evitando cascata de falhas. Após o timeout, permite uma chamada de teste
-// ("half-open"); se bem-sucedida, fecha o circuito novamente.
+// A circuit breaker monitors consecutive failures in calls to a service.
+// When the threshold is reached, it "opens" and immediately rejects calls,
+// preventing failure cascades. After the timeout, it allows a test call
+// ("half-open"); if successful, it closes the circuit again.
 package circuitbreaker
 
 import (
@@ -14,18 +14,18 @@ import (
 	"github.com/sony/gobreaker"
 )
 
-// MinIO é o circuit breaker para chamadas ao MinIO (download/upload).
+// MinIO is the circuit breaker for MinIO calls (download/upload).
 var MinIO *gobreaker.CircuitBreaker
 
-// Redis é o circuit breaker para chamadas ao Redis (consumo de fila, estado de job).
+// Redis is the circuit breaker for Redis calls (queue consumption, job state).
 var Redis *gobreaker.CircuitBreaker
 
 func init() {
 	MinIO = gobreaker.NewCircuitBreaker(gobreaker.Settings{
 		Name:        "minio",
-		MaxRequests: 1,                // 1 requisição de teste no estado half-open
-		Interval:    30 * time.Second, // janela de contagem de falhas
-		Timeout:     60 * time.Second, // tempo em open antes de tentar half-open
+		MaxRequests: 1,                // 1 test request in half-open state
+		Interval:    30 * time.Second, // failure counting window
+		Timeout:     60 * time.Second, // time in open before attempting half-open
 		ReadyToTrip: func(counts gobreaker.Counts) bool {
 			return counts.ConsecutiveFailures >= 5
 		},
@@ -34,7 +34,7 @@ func init() {
 				Str("service", name).
 				Str("from", from.String()).
 				Str("to", to.String()).
-				Msg("Circuit breaker mudou de estado")
+				Msg("Circuit breaker state changed")
 		},
 	})
 
@@ -51,7 +51,7 @@ func init() {
 				Str("service", name).
 				Str("from", from.String()).
 				Str("to", to.String()).
-				Msg("Circuit breaker mudou de estado")
+				Msg("Circuit breaker state changed")
 		},
 	})
 }

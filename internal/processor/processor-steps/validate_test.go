@@ -12,7 +12,7 @@ func TestValidateVideo_ValidVideo(t *testing.T) {
 
 	err := ValidateVideo(context.Background(), videoPath)
 	if err != nil {
-		t.Errorf("ValidateVideo() deveria ter sucesso com vídeo válido, mas retornou erro: %v", err)
+		t.Errorf("ValidateVideo() should succeed with valid video, but returned error: %v", err)
 	}
 }
 
@@ -21,14 +21,14 @@ func TestValidateVideo_InvalidVideo(t *testing.T) {
 
 	err := ValidateVideo(context.Background(), invalidPath)
 	if err == nil {
-		t.Error("ValidateVideo() deveria falhar com arquivo inválido, mas teve sucesso")
+		t.Error("ValidateVideo() should fail with invalid file, but succeeded")
 	}
 }
 
 func TestValidateVideo_NonExistentFile(t *testing.T) {
-	err := ValidateVideo(context.Background(), "/caminho/que/nao/existe.mp4")
+	err := ValidateVideo(context.Background(), "/path/that/does/not/exist.mp4")
 	if err == nil {
-		t.Error("ValidateVideo() deveria falhar com arquivo inexistente, mas teve sucesso")
+		t.Error("ValidateVideo() should fail with non-existent file, but succeeded")
 	}
 }
 
@@ -37,11 +37,11 @@ func TestValidateVideo_EmptyFile(t *testing.T) {
 	emptyPath := filepath.Join(tempDir, "empty.mp4")
 
 	if err := os.WriteFile(emptyPath, []byte{}, 0644); err != nil {
-		t.Fatalf("Falha ao criar arquivo vazio: %v", err)
+		t.Fatalf("Failed to create empty file: %v", err)
 	}
 
 	err := ValidateVideo(context.Background(), emptyPath)
 	if err == nil {
-		t.Error("ValidateVideo() deveria falhar com arquivo vazio, mas teve sucesso")
+		t.Error("ValidateVideo() should fail with empty file, but succeeded")
 	}
 }

@@ -1,77 +1,77 @@
 # 🎥 VidroProcessor
 
-Sistema distribuído de processamento de vídeos construído em Go, utilizando arquitetura baseada em workers e filas de mensagens.
+Distributed video processing system built in Go, using a worker-based architecture with message queues.
 
 [![Go Version](https://img.shields.io/badge/Go-1.24-00ADD8?style=flat&logo=go)](https://golang.org/)
 [![Tests](https://img.shields.io/badge/tests-passing-brightgreen)](docs/TESTING.md)
 [![Coverage](https://img.shields.io/badge/coverage-63.7%25-yellow)](docs/TESTING.md)
-[![Status](https://img.shields.io/badge/status-bugs%20known-orange)](docs/documentation.md#problemas-conhecidos)
+[![Status](https://img.shields.io/badge/status-bugs%20known-orange)](docs/documentation.md#known-issues)
 
-## ✨ Características
+## ✨ Features
 
-- ✅ **Pipeline Completo de Processamento** - 7 etapas com FFmpeg
-- ✅ **Arquitetura Distribuída** - Workers concorrentes escaláveis
-- ✅ **Logging Estruturado** - Zerolog com output JSON
-- ✅ **Métricas Prometheus** - Observabilidade completa
+- ✅ **Complete Processing Pipeline** - 7 steps with FFmpeg
+- ✅ **Distributed Architecture** - Scalable concurrent workers
+- ✅ **Structured Logging** - Zerolog with JSON output
+- ✅ **Prometheus Metrics** - Full observability
 - ✅ **Health Checks** - Kubernetes ready
-- ✅ **Processamento Assíncrono** - Filas Redis
-- ✅ **Armazenamento S3** - MinIO compatível
+- ✅ **Async Processing** - Redis queues
+- ✅ **S3 Storage** - MinIO compatible
 
 ## 🚀 Quick Start
 
-### Pré-requisitos
+### Prerequisites
 
 - Go 1.24+
 - Docker & Docker Compose
-- FFmpeg (para processamento local)
+- FFmpeg (for local processing)
 
-### Instalação
+### Installation
 
 ```bash
-# Clone o repositório
+# Clone the repository
 git clone <repository-url>
 cd VidroProcessor
 
-# Copie o arquivo de ambiente
+# Copy the environment file
 cp .env-example .env
 
-# Suba as dependências (Redis e MinIO)
+# Start dependencies (Redis and MinIO)
 docker-compose up -d
 
-# Instale dependências Go
+# Install Go dependencies
 go mod download
 
-# Compile o projeto
+# Build the project
 go build -o video-processor
 
-# Execute
+# Run
 ./video-processor
 ```
 
-## 📋 Pipeline de Processamento
+## 📋 Processing Pipeline
 
-O sistema processa vídeos através de 7 etapas:
+The system processes videos through 7 steps:
 
-1. **Validação** - Verifica integridade com ffprobe
-2. **Análise** - Extrai metadados (duração, resolução, codecs)
-3. **Transcodificação** - Converte para MP4 (H.264 + AAC)
-4. **Thumbnails** - Gera 5 imagens de preview (320x180)
-5. **Áudio** - Extrai track de áudio em MP3
-6. **Preview** - Cria versão de baixa qualidade (640px, 30s)
-7. **Streaming** - Segmenta para HLS (6s por segmento)
+1. **Validation** - Checks integrity with ffprobe
+2. **Analysis** - Extracts metadata (duration, resolution, codecs)
+3. **Transcoding** - Converts to MP4 (H.264 + AAC)
+4. **Thumbnails** - Generates 5 preview images (320x180)
+5. **Audio** - Extracts audio track as MP3
+6. **Preview** - Creates low-quality version (640px, 30s)
+7. **Streaming** - Segments for HLS (6s per segment)
 
-## 🏗️ Arquitetura
+## 🏗️ Architecture
 
 ```
 ┌─────────────┐      ┌──────────┐      ┌────────────┐
-│  Produtor   │─────▶│  Redis   │─────▶│  Workers   │
-└─────────────┘      │  Queue   │      │ (Múltiplos)│
+│  Producer   │─────▶│  Redis   │─────▶│  Workers   │
+└─────────────┘      │  Queue   │      │ (Multiple) │
                      └──────────┘      └────────────┘
                                               │
                                               ▼
                                        ┌──────────────┐
                                        │   Pipeline   │
-                                       │ (7 etapas)   │
+                                       │  (7 steps)   │
                                        └──────────────┘
                                               │
                                               ▼
@@ -81,53 +81,53 @@ O sistema processa vídeos através de 7 etapas:
                                        └──────────────┘
 ```
 
-### Componentes
+### Components
 
-- **Workers**: Processam vídeos em paralelo (configurável)
-- **Redis**: Fila de mensagens para coordenação
-- **MinIO**: Armazenamento de objetos (compatível S3)
-- **FFmpeg**: Engine de processamento de vídeo
-- **Prometheus**: Coleta de métricas
-- **Grafana**: Visualização (opcional)
+- **Workers**: Process videos in parallel (configurable)
+- **Redis**: Message queue for coordination
+- **MinIO**: Object storage (S3 compatible)
+- **FFmpeg**: Video processing engine
+- **Prometheus**: Metrics collection
+- **Grafana**: Visualization (optional)
 
-## 📊 Observabilidade
+## 📊 Observability
 
-### Endpoints HTTP (`:8080`)
+### HTTP Endpoints (`:8080`)
 
 - **`/health`** - Health check (Redis + MinIO)
-- **`/metrics`** - Métricas Prometheus
+- **`/metrics`** - Prometheus metrics
 
-### Métricas Disponíveis
+### Available Metrics
 
-- `videos_processed_total{status}` - Total de vídeos processados
-- `video_processing_duration_seconds` - Tempo de processamento
-- `video_processing_step_duration_seconds{step}` - Tempo por etapa
-- `active_workers` - Workers ativos
-- `queue_size` - Tamanho da fila
-- `video_size_bytes` - Distribuição de tamanhos
+- `videos_processed_total{status}` - Total videos processed
+- `video_processing_duration_seconds` - Processing time
+- `video_processing_step_duration_seconds{step}` - Time per step
+- `active_workers` - Active workers
+- `queue_size` - Queue size
+- `video_size_bytes` - Size distribution
 
-Ver [OBSERVABILITY.md](docs/OBSERVABILITY.md) para detalhes completos.
+See [OBSERVABILITY.md](docs/OBSERVABILITY.md) for full details.
 
-## 🧪 Testes
+## 🧪 Tests
 
 ```bash
-# Executar todos os testes
+# Run all tests
 go test ./...
 
-# Com cobertura
+# With coverage
 go test ./... -cover
 
-# Com saída detalhada
+# Verbose output
 go test -v ./...
 ```
 
-**Cobertura Atual**: 63.7% (processor-steps)
+**Current Coverage**: 63.7% (processor-steps)
 
-Ver [TESTING.md](docs/TESTING.md) para mais detalhes.
+See [TESTING.md](docs/TESTING.md) for more details.
 
-## ⚙️ Configuração
+## ⚙️ Configuration
 
-### Variáveis de Ambiente
+### Environment Variables
 
 ```bash
 # Redis
@@ -141,31 +141,31 @@ MINIO_ROOT_USER=minioadmin
 MINIO_ROOT_PASSWORD=minioadmin
 MINIO_BUCKET_NAME=videos
 
-# Workers (opcional)
-WORKER_COUNT=4  # Padrão: número de CPUs
+# Workers (optional)
+WORKER_COUNT=4  # Default: number of CPUs
 ```
 
-Ver [.env-example](./.env-example) para exemplo completo.
+See [.env-example](./.env-example) for a complete example.
 
-## 📦 Estrutura do Projeto
+## 📦 Project Structure
 
 ```
 VidroProcessor/
-├── config/                 # Configurações
+├── config/                 # Configuration
 ├── internal/
 │   └── processor/
-│       ├── processor.go           # Orquestrador do pipeline
-│       └── processor-steps/       # Etapas do processamento
-├── metrics/                # Métricas Prometheus
-├── minio/                  # Cliente MinIO
-├── queue/                  # Cliente Redis
-├── docs/                   # Documentação
-│   ├── documentation.md    # Documentação do projeto
-│   └── roadmap.md          # Roadmap e melhorias
-├── main.go                 # Ponto de entrada
-├── OBSERVABILITY.md        # Guia de observabilidade
-├── TESTING.md              # Guia de testes
-└── docker-compose.yml      # Serviços
+│       ├── processor.go           # Pipeline orchestrator
+│       └── processor-steps/       # Processing steps
+├── metrics/                # Prometheus metrics
+├── minio/                  # MinIO client
+├── queue/                  # Redis client
+├── docs/                   # Documentation
+│   ├── documentation.md    # Project documentation
+│   └── roadmap.md          # Roadmap and improvements
+├── main.go                 # Entry point
+├── OBSERVABILITY.md        # Observability guide
+├── TESTING.md              # Testing guide
+└── docker-compose.yml      # Services
 ```
 
 ## 🐳 Docker
@@ -189,73 +189,73 @@ docker run -d \
 ### Docker Compose
 
 ```bash
-# Subir todos os serviços
+# Start all services
 docker-compose up -d
 
-# Ver logs
+# View logs
 docker-compose logs -f video-processor
 
-# Parar
+# Stop
 docker-compose down
 ```
 
-## 📖 Documentação
+## 📖 Documentation
 
-- [📚 Documentação Completa](./docs/documentation.md) - Visão geral do projeto
-- [🗺️ Roadmap](./docs/roadmap.md) - Funcionalidades e melhorias
-- [📊 Observabilidade](docs/OBSERVABILITY.md) - Métricas e monitoramento
-- [🧪 Testes](docs/TESTING.md) - Guia de testes
+- [📚 Full Documentation](./docs/documentation.md) - Project overview
+- [🗺️ Roadmap](./docs/roadmap.md) - Features and improvements
+- [📊 Observability](docs/OBSERVABILITY.md) - Metrics and monitoring
+- [🧪 Testing](docs/TESTING.md) - Testing guide
 
 ## 🛣️ Roadmap
 
-### ✅ Implementado
+### ✅ Implemented
 
-- [x] Pipeline de processamento com FFmpeg (7 etapas)
-- [x] Logging estruturado (Zerolog)
-- [x] Métricas Prometheus
+- [x] Processing pipeline with FFmpeg (7 steps)
+- [x] Structured logging (Zerolog)
+- [x] Prometheus metrics
 - [x] Health check endpoint
-- [x] Testes unitários (63.7% cobertura)
-- [x] Testes de integração (testcontainers)
+- [x] Unit tests (63.7% coverage)
+- [x] Integration tests (testcontainers)
 
-### Bugs Conhecidos
+### Known Bugs
 
-- Workers travam no shutdown (BLPop sem context)
-- Artefatos das etapas 4–7 (thumbnails, HLS, áudio) não chegam ao MinIO
-- `docker-compose.yml` com env vars faltando no serviço worker
-- Senha MinIO exposta em log no startup
-- Fatal se não existir arquivo `.env`
+- Workers block on shutdown (BLPop without context)
+- Artifacts from steps 4–7 (thumbnails, HLS, audio) don't reach MinIO
+- `docker-compose.yml` with missing env vars in the worker service
+- MinIO password exposed in log at startup
+- Fatal if `.env` file does not exist
 
-### Próximo
+### Next
 
-- [ ] Corrigir bugs listados acima
-- [ ] Retry com exponential backoff
+- [ ] Fix bugs listed above
+- [ ] Retry with exponential backoff
 - [ ] Dead Letter Queue
 - [ ] Circuit breaker
-- [ ] Dashboard Grafana
+- [ ] Grafana Dashboard
 
-Ver [roadmap completo](./docs/roadmap.md).
+See [full roadmap](./docs/roadmap.md).
 
-## 🤝 Contribuindo
+## 🤝 Contributing
 
-1. Fork o projeto
-2. Crie uma branch (`git checkout -b feature/amazing-feature`)
-3. Commit suas mudanças (`git commit -m 'Add amazing feature'`)
-4. Push para a branch (`git push origin feature/amazing-feature`)
-5. Abra um Pull Request
+1. Fork the project
+2. Create a branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-## 📄 Licença
+## 📄 License
 
-Este projeto é fornecido como está, sem garantias.
+This project is provided as-is, without warranties.
 
-## 🙏 Agradecimentos
+## 🙏 Acknowledgements
 
-- [FFmpeg](https://ffmpeg.org/) - Processamento de vídeo
-- [Zerolog](https://github.com/rs/zerolog) - Logging estruturado
-- [Prometheus](https://prometheus.io/) - Métricas
-- [MinIO](https://min.io/) - Armazenamento de objetos
+- [FFmpeg](https://ffmpeg.org/) - Video processing
+- [Zerolog](https://github.com/rs/zerolog) - Structured logging
+- [Prometheus](https://prometheus.io/) - Metrics
+- [MinIO](https://min.io/) - Object storage
 
 ---
 
-**Versão**: 0.1.0
-**Status**: 🚀 Funcional
-**Última Atualização**: 2026-01-27
+**Version**: 0.1.0
+**Status**: 🚀 Functional
+**Last Updated**: 2026-01-27

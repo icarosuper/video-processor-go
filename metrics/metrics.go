@@ -6,16 +6,16 @@ import (
 )
 
 var (
-	// VideosProcessedTotal conta o número total de vídeos processados
+	// VideosProcessedTotal counts the total number of videos processed
 	VideosProcessedTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "videos_processed_total",
 			Help: "Total number of videos processed",
 		},
-		[]string{"status"}, // success ou error
+		[]string{"status"}, // success or error
 	)
 
-	// ProcessingDuration mede o tempo de processamento de vídeos
+	// ProcessingDuration measures video processing time
 	ProcessingDuration = promauto.NewHistogram(
 		prometheus.HistogramOpts{
 			Name:    "video_processing_duration_seconds",
@@ -24,7 +24,7 @@ var (
 		},
 	)
 
-	// ProcessingStepDuration mede o tempo de cada etapa do pipeline
+	// ProcessingStepDuration measures the time of each pipeline step
 	ProcessingStepDuration = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "video_processing_step_duration_seconds",
@@ -34,7 +34,7 @@ var (
 		[]string{"step"}, // validate, transcode, thumbnail, etc.
 	)
 
-	// ActiveWorkers conta o número de workers ativos
+	// ActiveWorkers counts the number of active workers
 	ActiveWorkers = promauto.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "active_workers",
@@ -42,7 +42,7 @@ var (
 		},
 	)
 
-	// QueueSize mede o tamanho da fila
+	// QueueSize measures the queue size
 	QueueSize = promauto.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "queue_size",
@@ -50,7 +50,7 @@ var (
 		},
 	)
 
-	// VideoSizeBytes mede o tamanho dos vídeos processados
+	// VideoSizeBytes measures the size of processed videos
 	VideoSizeBytes = promauto.NewHistogram(
 		prometheus.HistogramOpts{
 			Name:    "video_size_bytes",

@@ -6,7 +6,7 @@ import (
 	"os/exec"
 )
 
-// TranscodeVideo converte o vídeo para formatos padronizados (MP4, H.264, AAC).
+// TranscodeVideo converts the video to standardized formats (MP4, H.264, AAC).
 func TranscodeVideo(ctx context.Context, inputPath, outputPath string) error {
 	cmd := exec.CommandContext(ctx, "ffmpeg",
 		"-i", inputPath,
@@ -22,7 +22,7 @@ func TranscodeVideo(ctx context.Context, inputPath, outputPath string) error {
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("falha na transcodificação: %w, output: %s", err, string(output))
+		return fmt.Errorf("transcoding failed: %w, output: %s", err, string(output))
 	}
 
 	return nil

@@ -25,32 +25,32 @@ type Config struct {
 	// HTTP
 	HTTPPort string `env:"HTTP_PORT" envDefault:"8080"`
 
-	// Observabilidade
-	OTelEndpoint    string `env:"OTEL_ENDPOINT"`                              // opcional: endpoint OTLP (ex: jaeger:4318); vazio = no-op
-	OTelServiceName string `env:"OTEL_SERVICE_NAME" envDefault:"video-processor"` // nome do serviço nos traces
+	// Observability
+	OTelEndpoint    string `env:"OTEL_ENDPOINT"`                              // optional: OTLP endpoint (e.g. jaeger:4318); empty = no-op
+	OTelServiceName string `env:"OTEL_SERVICE_NAME" envDefault:"video-processor"` // service name in traces
 
 	// Webhook
-	WebhookSecret string `env:"WEBHOOK_SECRET"` // opcional: assina requisições com HMAC-SHA256
+	WebhookSecret string `env:"WEBHOOK_SECRET"` // optional: signs requests with HMAC-SHA256
 
 	// Workers
 	WorkerCount int `env:"WORKER_COUNT" envDefault:"0"`
 
-	// Processamento
+	// Processing
 	MaxFileSizeMB int64 `env:"MAX_FILE_SIZE_MB" envDefault:"5120"` // 5 GB
 }
 
 func LoadConfig() *Config {
-	// Ignora erro se o arquivo não existir (ex: deploy via Docker com env vars injetadas)
+	// Ignore error if file does not exist (e.g. Docker deploy with injected env vars)
 	if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
-		log.Fatalf("erro ao carregar .env: %v", err)
+		log.Fatalf("failed to load .env: %v", err)
 	}
 
 	cfg := Config{}
 	if err := env.Parse(&cfg); err != nil {
-		log.Fatalf("erro ao ler variáveis de ambiente: %v", err)
+		log.Fatalf("failed to read environment variables: %v", err)
 	}
 
-	log.Printf("Configuração carregada: redis=%s minio=%s bucket=%s workers=%d",
+	log.Printf("Configuration loaded: redis=%s minio=%s bucket=%s workers=%d",
 		cfg.RedisHost, cfg.MinioEndpoint, cfg.MinioBucketName, cfg.WorkerCount)
 
 	return &cfg

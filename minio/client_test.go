@@ -21,7 +21,7 @@ func TestContentTypeByExt(t *testing.T) {
 	for _, c := range cases {
 		got := contentTypeByExt(c.ext)
 		if got != c.expected {
-			t.Errorf("contentTypeByExt(%q) = %q, esperado %q", c.ext, got, c.expected)
+			t.Errorf("contentTypeByExt(%q) = %q, expected %q", c.ext, got, c.expected)
 		}
 	}
 }

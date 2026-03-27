@@ -29,22 +29,22 @@ import (
 )
 
 func main() {
-	// Configurar zerolog
+	// Configure zerolog
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 
 	cfg := config.LoadConfig()
 
-	// Inicializar tracing (no-op se OTEL_ENDPOINT não estiver configurado)
+	// Initialize tracing (no-op if OTEL_ENDPOINT is not configured)
 	shutdownTracing, err := telemetry.Init(context.Background(), cfg.OTelServiceName, cfg.OTelEndpoint)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Erro ao inicializar tracing")
+		log.Fatal().Err(err).Msg("Failed to initialize tracing")
 	}
 	defer shutdownTracing(context.Background())
 
 	initClients(cfg)
 
-	// Iniciar servidor HTTP com métricas e health check
+	// Start HTTP server with metrics and health check
 	startHTTPServer(cfg.HTTPPort)
 
 	numWorkers := cfg.WorkerCount
@@ -52,14 +52,14 @@ func main() {
 		numWorkers = runtime.NumCPU()
 	}
 
-	log.Info().Int("workers", numWorkers).Msg("Iniciando video-processor")
+	log.Info().Int("workers", numWorkers).Msg("Starting video-processor")
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Goroutine que recoloca jobs órfãos (crash durante processamento)
+	// Goroutine that re-queues orphan jobs (crash during processing)
 	go queue.StartRecovery(ctx, 10*time.Minute)
 
-	// Goroutine que atualiza a métrica de tamanho da fila a cada 30 segundos
+	// Goroutine that updates the queue size metric every 30 seconds
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
@@ -81,7 +81,7 @@ func main() {
 
 	var wg sync.WaitGroup
 
-	// Inicia os workers
+	// Start workers
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
 		go func(workerID int) {
@@ -89,12 +89,12 @@ func main() {
 			for {
 				select {
 				case <-ctx.Done():
-					log.Info().Int("workerID", workerID).Msg("Finalizando worker graciosamente")
+					log.Info().Int("workerID", workerID).Msg("Shutting down worker gracefully")
 					return
 				default:
 					if err := processNextMessage(ctx, workerID, cfg); err != nil {
 						if err != context.Canceled {
-							log.Error().Err(err).Int("workerID", workerID).Msg("Erro ao processar mensagem")
+							log.Error().Err(err).Int("workerID", workerID).Msg("Error processing message")
 						}
 					}
 				}
@@ -102,29 +102,29 @@ func main() {
 		}(i + 1)
 	}
 
-	// Aguarda sinal de interrupção
+	// Wait for interrupt signal
 	<-sigChan
-	log.Warn().Msg("Sinal de desligamento recebido. Iniciando shutdown gracioso")
+	log.Warn().Msg("Shutdown signal received. Starting graceful shutdown")
 
-	// Cancela o contexto para iniciar o shutdown
+	// Cancel context to initiate shutdown
 	cancel()
 
-	// Aguarda os workers com timeout
+	// Wait for workers with timeout
 	shutdownComplete := make(chan struct{})
 	go func() {
 		wg.Wait()
 		close(shutdownComplete)
 	}()
 
-	// Define um timeout para o shutdown (30 segundos)
+	// Set a timeout for shutdown (30 seconds)
 	select {
 	case <-shutdownComplete:
-		log.Info().Msg("Todos os workers encerraram normalmente")
+		log.Info().Msg("All workers shut down normally")
 	case <-time.After(30 * time.Second):
-		log.Warn().Msg("Timeout atingido. Forçando encerramento dos workers restantes")
+		log.Warn().Msg("Timeout reached. Forcing remaining workers to stop")
 	}
 
-	log.Info().Msg("Programa encerrado")
+	log.Info().Msg("Program terminated")
 }
 
 func initClients(cfg *config.Config) {
@@ -138,24 +138,24 @@ func startHTTPServer(port string) {
 
 	addr := ":" + port
 	go func() {
-		log.Info().Str("address", addr).Msg("Servidor HTTP iniciado")
+		log.Info().Str("address", addr).Msg("HTTP server started")
 		if err := http.ListenAndServe(addr, nil); err != nil {
-			log.Fatal().Err(err).Msg("Erro ao iniciar servidor HTTP")
+			log.Fatal().Err(err).Msg("Failed to start HTTP server")
 		}
 	}()
 }
 
 func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
-	// Verificar Redis
+	// Check Redis
 	if err := queue.HealthCheck(); err != nil {
-		log.Error().Err(err).Msg("Health check Redis falhou")
+		log.Error().Err(err).Msg("Redis health check failed")
 		http.Error(w, "Redis unavailable", http.StatusServiceUnavailable)
 		return
 	}
 
-	// Verificar MinIO
+	// Check MinIO
 	if err := minio.HealthCheck(); err != nil {
-		log.Error().Err(err).Msg("Health check MinIO falhou")
+		log.Error().Err(err).Msg("MinIO health check failed")
 		http.Error(w, "MinIO unavailable", http.StatusServiceUnavailable)
 		return
 	}
@@ -165,8 +165,8 @@ func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func processNextMessage(ctx context.Context, workerID int, cfg *config.Config) error {
-	// Bloqueia até receber mensagem ou ctx ser cancelado (shutdown).
-	// BRPOPLPUSH move o job atomicamente para a fila de processamento.
+	// Blocks until a message is received or ctx is canceled (shutdown).
+	// BRPOPLPUSH atomically moves the job to the processing queue.
 	msg, err := queue.ConsumeMessage(ctx)
 	if err != nil {
 		return err
@@ -176,13 +176,13 @@ func processNextMessage(ctx context.Context, workerID int, cfg *config.Config) e
 	}
 
 	videoID := msg.VideoID
-	log.Info().Int("workerID", workerID).Str("videoID", videoID).Msg("Processando vídeo")
+	log.Info().Int("workerID", workerID).Str("videoID", videoID).Msg("Processing video")
 
 	if err := queue.SetJobProcessing(videoID); err != nil {
-		log.Warn().Err(err).Str("videoID", videoID).Msg("Falha ao atualizar estado do job para processing")
+		log.Warn().Err(err).Str("videoID", videoID).Msg("Failed to update job state to processing")
 	}
 
-	// Span raiz do job — engloba todo o processamento incluindo upload
+	// Root job span — covers the entire processing including upload
 	jobCtx, span := telemetry.Tracer().Start(ctx, "process_job",
 		oteltrace.WithAttributes(attribute.String("video.id", videoID)),
 	)
@@ -194,7 +194,7 @@ func processNextMessage(ctx context.Context, workerID int, cfg *config.Config) e
 	done := make(chan error, 1)
 
 	go func() {
-		// jobErr rastreia o erro final para o defer abaixo.
+		// jobErr tracks the final error for the defer below.
 		var jobErr error
 
 		metrics.ActiveWorkers.Inc()
@@ -204,20 +204,20 @@ func processNextMessage(ctx context.Context, workerID int, cfg *config.Config) e
 			if jobErr != nil {
 				state, err := queue.SetJobFailed(videoID, jobErr)
 				if err != nil {
-					log.Warn().Err(err).Str("videoID", videoID).Msg("Falha ao atualizar estado do job para failed")
+					log.Warn().Err(err).Str("videoID", videoID).Msg("Failed to update job state to failed")
 				}
 				if state != nil && state.RetryCount <= queue.MaxJobRetries {
 					if err := queue.RequeueJob(videoID); err != nil {
-						log.Warn().Err(err).Str("videoID", videoID).Msg("Falha ao recolocar job na fila")
+						log.Warn().Err(err).Str("videoID", videoID).Msg("Failed to requeue job")
 					} else {
-						log.Warn().Str("videoID", videoID).Int("tentativa", state.RetryCount).Int("max", queue.MaxJobRetries).Msg("Job agendado para retry")
+						log.Warn().Str("videoID", videoID).Int("attempt", state.RetryCount).Int("max", queue.MaxJobRetries).Msg("Job scheduled for retry")
 					}
 				} else {
 					if err := queue.MoveToDLQ(videoID); err != nil {
-						log.Warn().Err(err).Str("videoID", videoID).Msg("Falha ao mover job para dead letter queue")
+						log.Warn().Err(err).Str("videoID", videoID).Msg("Failed to move job to dead letter queue")
 					} else {
-						log.Error().Str("videoID", videoID).Str("erro", jobErr.Error()).Msg("Job movido para dead letter queue após esgotar tentativas")
-						// Notifica a API sobre a falha permanente (retries esgotados)
+						log.Error().Str("videoID", videoID).Str("error", jobErr.Error()).Msg("Job moved to dead letter queue after exhausting retries")
+						// Notify the API about the permanent failure (retries exhausted)
 						if state != nil && state.CallbackURL != "" {
 							go notifyWebhook(state.CallbackURL, cfg.WebhookSecret, videoID, state)
 						}
@@ -225,7 +225,7 @@ func processNextMessage(ctx context.Context, workerID int, cfg *config.Config) e
 				}
 			}
 			if err := queue.AcknowledgeMessage(videoID); err != nil {
-				log.Warn().Err(err).Str("videoID", videoID).Msg("Falha ao confirmar processamento do job")
+				log.Warn().Err(err).Str("videoID", videoID).Msg("Failed to acknowledge job")
 			}
 		}()
 
@@ -240,7 +240,7 @@ func processNextMessage(ctx context.Context, workerID int, cfg *config.Config) e
 		}()
 
 		if err := minio.DownloadVideo(minio.VideoTypeRaw, videoID, inputPath); err != nil {
-			jobErr = fmt.Errorf("erro ao baixar vídeo: %v", err)
+			jobErr = fmt.Errorf("failed to download video: %v", err)
 			metrics.VideosProcessedTotal.WithLabelValues("error").Inc()
 			done <- jobErr
 			return
@@ -254,7 +254,7 @@ func processNextMessage(ctx context.Context, workerID int, cfg *config.Config) e
 			defer os.RemoveAll(result.TempDir)
 		}
 		if err != nil {
-			jobErr = fmt.Errorf("erro ao processar vídeo: %v", err)
+			jobErr = fmt.Errorf("failed to process video: %v", err)
 			metrics.VideosProcessedTotal.WithLabelValues("error").Inc()
 			done <- jobErr
 			return
@@ -262,55 +262,55 @@ func processNextMessage(ctx context.Context, workerID int, cfg *config.Config) e
 
 		processedID := videoID + "_processed"
 		if err := minio.UploadVideo(outputPath, minio.VideoTypeProcessed, processedID); err != nil {
-			jobErr = fmt.Errorf("erro ao fazer upload do vídeo: %v", err)
+			jobErr = fmt.Errorf("failed to upload video: %v", err)
 			metrics.VideosProcessedTotal.WithLabelValues("error").Inc()
 			done <- jobErr
 			return
 		}
 
-		// Arquiva o raw original para raw-archived/ (será deletado automaticamente após 30 dias).
-		// Erro não é fatal — o vídeo já foi processado e os artefatos estão no MinIO.
+		// Archive the original raw to raw-archived/ (auto-deleted after 30 days).
+		// Error is not fatal — the video is already processed and artifacts are in MinIO.
 		if err := minio.ArchiveRawVideo(videoID); err != nil {
-			log.Warn().Err(err).Str("videoID", videoID).Msg("Falha ao arquivar raw — será retido em raw/")
+			log.Warn().Err(err).Str("videoID", videoID).Msg("Failed to archive raw — will be retained in raw/")
 		}
 
-		// Upload dos artefatos opcionais gerados pelo pipeline
+		// Upload optional artifacts generated by the pipeline
 		if result.ThumbnailsDir != "" {
 			if err := minio.UploadDirectory(result.ThumbnailsDir, "thumbnails/"+videoID); err != nil {
-				log.Warn().Err(err).Str("videoID", videoID).Msg("Falha ao fazer upload dos thumbnails")
+				log.Warn().Err(err).Str("videoID", videoID).Msg("Failed to upload thumbnails")
 			}
 		}
 		if result.AudioPath != "" {
 			if err := minio.UploadFile(result.AudioPath, "audio/"+videoID+".mp3"); err != nil {
-				log.Warn().Err(err).Str("videoID", videoID).Msg("Falha ao fazer upload do áudio")
+				log.Warn().Err(err).Str("videoID", videoID).Msg("Failed to upload audio")
 			}
 		}
 		if result.PreviewPath != "" {
 			if err := minio.UploadFile(result.PreviewPath, "preview/"+videoID+"_preview.mp4"); err != nil {
-				log.Warn().Err(err).Str("videoID", videoID).Msg("Falha ao fazer upload do preview")
+				log.Warn().Err(err).Str("videoID", videoID).Msg("Failed to upload preview")
 			}
 		}
 		if result.StreamingDir != "" {
 			if err := minio.UploadDirectory(result.StreamingDir, "hls/"+videoID); err != nil {
-				log.Warn().Err(err).Str("videoID", videoID).Msg("Falha ao fazer upload dos segmentos HLS")
+				log.Warn().Err(err).Str("videoID", videoID).Msg("Failed to upload HLS segments")
 			}
 		}
 
 		if err := queue.PublishSuccessMessage(processedID); err != nil {
-			jobErr = fmt.Errorf("erro ao publicar mensagem de sucesso: %v", err)
+			jobErr = fmt.Errorf("failed to publish success message: %v", err)
 			metrics.VideosProcessedTotal.WithLabelValues("error").Inc()
 			done <- jobErr
 			return
 		}
 
-		// Registra estado final e métricas de sucesso
+		// Record final state and success metrics
 		artifacts := buildJobArtifacts(videoID, processedID, result)
 		metadata := toJobMetadata(result)
 		if err := queue.SetJobDone(videoID, artifacts, metadata); err != nil {
-			log.Warn().Err(err).Str("videoID", videoID).Msg("Falha ao atualizar estado do job para done")
+			log.Warn().Err(err).Str("videoID", videoID).Msg("Failed to update job state to done")
 		}
 
-		// Notifica a API sobre o sucesso
+		// Notify the API about success
 		if state, err := queue.GetJobState(videoID); err == nil && state != nil && state.CallbackURL != "" {
 			go notifyWebhook(state.CallbackURL, cfg.WebhookSecret, videoID, state)
 		}
@@ -319,7 +319,7 @@ func processNextMessage(ctx context.Context, workerID int, cfg *config.Config) e
 		metrics.ProcessingDuration.Observe(duration)
 		metrics.VideosProcessedTotal.WithLabelValues("success").Inc()
 
-		log.Info().Int("workerID", workerID).Str("videoID", videoID).Float64("duration_seconds", duration).Msg("Vídeo processado com sucesso")
+		log.Info().Int("workerID", workerID).Str("videoID", videoID).Float64("duration_seconds", duration).Msg("Video processed successfully")
 		done <- nil
 	}()
 
@@ -327,11 +327,11 @@ func processNextMessage(ctx context.Context, workerID int, cfg *config.Config) e
 	case err := <-done:
 		return err
 	case <-processCtx.Done():
-		return fmt.Errorf("operação cancelada: %v", processCtx.Err())
+		return fmt.Errorf("operation canceled: %v", processCtx.Err())
 	}
 }
 
-// toJobMetadata converte os metadados do pipeline para o tipo do pacote queue.
+// toJobMetadata converts pipeline metadata to the queue package type.
 func toJobMetadata(result *processor.ProcessingResult) *queue.VideoMetadata {
 	if result.Metadata == nil {
 		return nil
@@ -348,8 +348,8 @@ func toJobMetadata(result *processor.ProcessingResult) *queue.VideoMetadata {
 	}
 }
 
-// buildJobArtifacts monta o objeto de artefatos com os paths no MinIO
-// a partir do resultado do pipeline. Só inclui artefatos que foram gerados.
+// buildJobArtifacts builds the artifacts object with MinIO paths
+// from the pipeline result. Only includes artifacts that were generated.
 func buildJobArtifacts(videoID, processedID string, result *processor.ProcessingResult) queue.JobArtifacts {
 	artifacts := queue.JobArtifacts{
 		Video: "processed/" + processedID,
@@ -369,8 +369,8 @@ func buildJobArtifacts(videoID, processedID string, result *processor.Processing
 	return artifacts
 }
 
-// notifyWebhook envia a notificação de conclusão do job ao callbackURL em background.
-// Erros de entrega são apenas logados — não afetam o resultado do job.
+// notifyWebhook sends the job completion notification to the callbackURL in the background.
+// Delivery errors are only logged — they do not affect the job result.
 func notifyWebhook(callbackURL, secret, videoID string, state *queue.JobState) {
 	payload := webhook.Payload{
 		VideoID:   videoID,
@@ -380,8 +380,8 @@ func notifyWebhook(callbackURL, secret, videoID string, state *queue.JobState) {
 		Metadata:  state.Metadata,
 	}
 	if err := webhook.Notify(callbackURL, secret, payload); err != nil {
-		log.Warn().Err(err).Str("videoID", videoID).Str("callbackURL", callbackURL).Msg("Falha ao enviar webhook")
+		log.Warn().Err(err).Str("videoID", videoID).Str("callbackURL", callbackURL).Msg("Failed to send webhook")
 	} else {
-		log.Info().Str("videoID", videoID).Str("callbackURL", callbackURL).Msg("Webhook enviado com sucesso")
+		log.Info().Str("videoID", videoID).Str("callbackURL", callbackURL).Msg("Webhook sent successfully")
 	}
 }

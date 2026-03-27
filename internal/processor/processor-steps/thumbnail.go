@@ -10,19 +10,19 @@ import (
 	"strings"
 )
 
-// ThumbnailConfig define as configurações para geração de thumbnails.
+// ThumbnailConfig defines the configuration for thumbnail generation.
 type ThumbnailConfig struct {
 	Count  int
 	Width  int
 	Height int
 }
 
-// GenerateThumbnails gera thumbnails do vídeo em múltiplos timestamps.
+// GenerateThumbnails generates thumbnails from the video at multiple timestamps.
 func GenerateThumbnails(ctx context.Context, inputPath, outputDir string) error {
 	config := ThumbnailConfig{Count: 5, Width: 320, Height: 180}
 
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		return fmt.Errorf("falha ao criar diretório de thumbnails: %w", err)
+		return fmt.Errorf("failed to create thumbnails directory: %w", err)
 	}
 
 	durationCmd := exec.CommandContext(ctx, "ffprobe",
@@ -34,12 +34,12 @@ func GenerateThumbnails(ctx context.Context, inputPath, outputDir string) error 
 
 	durationOutput, err := durationCmd.Output()
 	if err != nil {
-		return fmt.Errorf("falha ao obter duração: %w", err)
+		return fmt.Errorf("failed to get duration: %w", err)
 	}
 
 	duration, err := strconv.ParseFloat(strings.TrimSpace(string(durationOutput)), 64)
 	if err != nil {
-		return fmt.Errorf("duração inválida: %w", err)
+		return fmt.Errorf("invalid duration: %w", err)
 	}
 
 	interval := duration / float64(config.Count+1)
@@ -58,7 +58,7 @@ func GenerateThumbnails(ctx context.Context, inputPath, outputDir string) error 
 		)
 
 		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("falha ao gerar thumbnail %d: %w", i, err)
+			return fmt.Errorf("failed to generate thumbnail %d: %w", i, err)
 		}
 	}
 

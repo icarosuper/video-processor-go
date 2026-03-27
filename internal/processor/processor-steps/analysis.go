@@ -11,7 +11,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// VideoMetadata contém metadados extraídos do vídeo.
+// VideoMetadata contains metadata extracted from the video.
 type VideoMetadata struct {
 	Duration   float64 `json:"duration"`
 	Width      int     `json:"width"`
@@ -23,7 +23,7 @@ type VideoMetadata struct {
 	Size       int64   `json:"size"`
 }
 
-// AnalyzeContent extrai metadados e informações técnicas do vídeo.
+// AnalyzeContent extracts metadata and technical information from the video.
 func AnalyzeContent(ctx context.Context, inputPath string) (*VideoMetadata, error) {
 	cmd := exec.CommandContext(ctx, "ffprobe",
 		"-v", "quiet",
@@ -35,7 +35,7 @@ func AnalyzeContent(ctx context.Context, inputPath string) (*VideoMetadata, erro
 
 	output, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("falha na análise: %w", err)
+		return nil, fmt.Errorf("analysis failed: %w", err)
 	}
 
 	var probeData struct {
@@ -54,7 +54,7 @@ func AnalyzeContent(ctx context.Context, inputPath string) (*VideoMetadata, erro
 	}
 
 	if err := json.Unmarshal(output, &probeData); err != nil {
-		return nil, fmt.Errorf("falha ao parsear JSON: %w", err)
+		return nil, fmt.Errorf("failed to parse JSON: %w", err)
 	}
 
 	metadata := &VideoMetadata{}
@@ -90,7 +90,7 @@ func AnalyzeContent(ctx context.Context, inputPath string) (*VideoMetadata, erro
 		Float64("fps", metadata.FPS).
 		Int64("bitrate", metadata.Bitrate).
 		Int64("size", metadata.Size).
-		Msg("Metadados do vídeo extraídos")
+		Msg("Video metadata extracted")
 
 	return metadata, nil
 }

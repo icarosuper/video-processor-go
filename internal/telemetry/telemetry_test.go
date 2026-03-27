@@ -8,40 +8,40 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
-func TestInit_EndpointVazio_Noop(t *testing.T) {
+func TestInit_EmptyEndpoint_Noop(t *testing.T) {
 	shutdown, err := Init(context.Background(), "test-service", "")
 	if err != nil {
-		t.Fatalf("Init() com endpoint vazio não deveria retornar erro: %v", err)
+		t.Fatalf("Init() with empty endpoint should not return error: %v", err)
 	}
 	if shutdown == nil {
-		t.Fatal("Init() deveria retornar função de shutdown não-nula")
+		t.Fatal("Init() should return a non-nil shutdown function")
 	}
 
-	// Shutdown do noop não deve retornar erro
+	// Noop shutdown should not return error
 	if err := shutdown(context.Background()); err != nil {
-		t.Fatalf("shutdown() não deveria retornar erro: %v", err)
+		t.Fatalf("shutdown() should not return error: %v", err)
 	}
 }
 
-func TestInit_EndpointVazio_InstalaNoop(t *testing.T) {
+func TestInit_EmptyEndpoint_InstallsNoop(t *testing.T) {
 	Init(context.Background(), "test-service", "") //nolint:errcheck
 
 	provider := otel.GetTracerProvider()
 	if _, ok := provider.(noop.TracerProvider); !ok {
-		t.Fatal("Init() com endpoint vazio deveria instalar um noop.TracerProvider")
+		t.Fatal("Init() with empty endpoint should install a noop.TracerProvider")
 	}
 }
 
-func TestTracer_RetornaNaoNulo(t *testing.T) {
+func TestTracer_ReturnsNonNil(t *testing.T) {
 	Init(context.Background(), "test-service", "") //nolint:errcheck
 
 	tracer := Tracer()
 	if tracer == nil {
-		t.Fatal("Tracer() não deveria retornar nil")
+		t.Fatal("Tracer() should not return nil")
 	}
 }
 
-func TestTracer_CriaSpan(t *testing.T) {
+func TestTracer_CreatesSpan(t *testing.T) {
 	Init(context.Background(), "test-service", "") //nolint:errcheck
 
 	tracer := Tracer()
@@ -49,27 +49,27 @@ func TestTracer_CriaSpan(t *testing.T) {
 	defer span.End()
 
 	if ctx == nil {
-		t.Fatal("tracer.Start() deveria retornar contexto não-nulo")
+		t.Fatal("tracer.Start() should return a non-nil context")
 	}
 	if span == nil {
-		t.Fatal("tracer.Start() deveria retornar span não-nulo")
+		t.Fatal("tracer.Start() should return a non-nil span")
 	}
 }
 
-func TestTracerName_Constante(t *testing.T) {
+func TestTracerName_Constant(t *testing.T) {
 	if TracerName != "video-processor" {
-		t.Fatalf("TracerName deveria ser 'video-processor', got '%s'", TracerName)
+		t.Fatalf("TracerName should be 'video-processor', got '%s'", TracerName)
 	}
 }
 
-func TestInit_EndpointInvalido_RetornaErro(t *testing.T) {
-	// Um endpoint mal-formado que causa falha ao criar o exporter OTLP
-	// O exporter OTLP HTTP só falha na primeira exportação, não na criação —
-	// então Init com endpoint inválido retorna nil err (conexão é lazy).
-	// Verificamos apenas que a função retorna sem panic.
+func TestInit_InvalidEndpoint_ReturnsError(t *testing.T) {
+	// A malformed endpoint that causes the OTLP exporter creation to fail
+	// The OTLP HTTP exporter only fails on the first export, not on creation —
+	// so Init with an invalid endpoint returns nil err (connection is lazy).
+	// We only verify that the function returns without panicking.
 	shutdown, err := Init(context.Background(), "test-service", "localhost:99999")
 	if err != nil {
-		// Se retornar erro, também é comportamento válido
+		// Returning an error is also valid behavior
 		return
 	}
 	if shutdown != nil {

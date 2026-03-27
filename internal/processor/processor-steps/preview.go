@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// GeneratePreview gera um preview de baixa qualidade do vídeo (primeiros 30 segundos ou 10% do vídeo).
+// GeneratePreview generates a low-quality preview of the video (first 30 seconds or 10% of the video).
 func GeneratePreview(ctx context.Context, inputPath, outputPath string) error {
 	durationCmd := exec.CommandContext(ctx, "ffprobe",
 		"-v", "error",
@@ -19,12 +19,12 @@ func GeneratePreview(ctx context.Context, inputPath, outputPath string) error {
 
 	durationOutput, err := durationCmd.Output()
 	if err != nil {
-		return fmt.Errorf("falha ao obter duração: %w", err)
+		return fmt.Errorf("failed to get duration: %w", err)
 	}
 
 	duration, err := strconv.ParseFloat(strings.TrimSpace(string(durationOutput)), 64)
 	if err != nil {
-		return fmt.Errorf("duração inválida: %w", err)
+		return fmt.Errorf("invalid duration: %w", err)
 	}
 
 	previewDuration := duration
@@ -46,7 +46,7 @@ func GeneratePreview(ctx context.Context, inputPath, outputPath string) error {
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("falha na geração de preview: %w, output: %s", err, string(output))
+		return fmt.Errorf("preview generation failed: %w, output: %s", err, string(output))
 	}
 
 	return nil

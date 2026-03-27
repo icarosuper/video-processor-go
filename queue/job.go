@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// VideoMetadata espelha os metadados extraídos pela etapa de análise do pipeline.
+// VideoMetadata mirrors the metadata extracted by the pipeline analysis step.
 type VideoMetadata struct {
 	Duration   float64 `json:"duration"`
 	Width      int     `json:"width"`
@@ -19,7 +19,7 @@ type VideoMetadata struct {
 	Size       int64   `json:"size"`
 }
 
-// JobStatus representa o estado de um job de processamento.
+// JobStatus represents the state of a processing job.
 type JobStatus string
 
 const (
@@ -28,13 +28,13 @@ const (
 	JobStatusDone       JobStatus = "done"
 	JobStatusFailed     JobStatus = "failed"
 
-	// MaxJobRetries é o número máximo de retentativas após a tentativa inicial.
+	// MaxJobRetries is the maximum number of retries after the initial attempt.
 	MaxJobRetries = 3
 
 	jobTTL = 24 * time.Hour
 )
 
-// JobArtifacts contém os paths dos artefatos gerados no MinIO.
+// JobArtifacts contains the paths of the artifacts generated in MinIO.
 type JobArtifacts struct {
 	Video      string `json:"video,omitempty"`
 	Thumbnails string `json:"thumbnails,omitempty"`
@@ -43,7 +43,7 @@ type JobArtifacts struct {
 	HLS        string `json:"hls,omitempty"`
 }
 
-// JobState representa o estado completo de um job de processamento.
+// JobState represents the complete state of a processing job.
 type JobState struct {
 	Status      JobStatus      `json:"status"`
 	Error       string         `json:"error,omitempty"`
@@ -63,14 +63,14 @@ func setJobState(videoID string, state JobState) error {
 	state.UpdatedAt = time.Now().Unix()
 	data, err := json.Marshal(state)
 	if err != nil {
-		return fmt.Errorf("erro ao serializar estado do job: %w", err)
+		return fmt.Errorf("failed to serialize job state: %w", err)
 	}
 	return client.Set(context.Background(), jobKey(videoID), string(data), jobTTL).Err()
 }
 
-// PublishJob publica um videoID na fila e registra o estado inicial como pending.
-// callbackURL é opcional: se não vazio, o worker notificará essa URL ao concluir.
-// Deve ser chamado pelo produtor (API) ao submeter um vídeo para processamento.
+// PublishJob publishes a videoID to the queue and records the initial state as pending.
+// callbackURL is optional: if non-empty, the worker will notify this URL upon completion.
+// Should be called by the producer (API) when submitting a video for processing.
 func PublishJob(videoID, callbackURL string) error {
 	state := JobState{
 		Status:      JobStatusPending,
@@ -78,12 +78,12 @@ func PublishJob(videoID, callbackURL string) error {
 		CreatedAt:   time.Now().Unix(),
 	}
 	if err := setJobState(videoID, state); err != nil {
-		return fmt.Errorf("erro ao criar estado do job: %w", err)
+		return fmt.Errorf("failed to create job state: %w", err)
 	}
 	return client.LPush(context.Background(), cfg.ProcessingRequestQueue, videoID).Err()
 }
 
-// SetJobProcessing atualiza o estado do job para processing.
+// SetJobProcessing updates the job state to processing.
 func SetJobProcessing(videoID string) error {
 	existing, _ := GetJobState(videoID)
 	if existing == nil {
@@ -93,7 +93,7 @@ func SetJobProcessing(videoID string) error {
 	return setJobState(videoID, *existing)
 }
 
-// SetJobDone atualiza o estado do job para done com os artefatos e metadados gerados.
+// SetJobDone updates the job state to done with the generated artifacts and metadata.
 func SetJobDone(videoID string, artifacts JobArtifacts, metadata *VideoMetadata) error {
 	existing, _ := GetJobState(videoID)
 	if existing == nil {
@@ -106,8 +106,8 @@ func SetJobDone(videoID string, artifacts JobArtifacts, metadata *VideoMetadata)
 	return setJobState(videoID, *existing)
 }
 
-// SetJobFailed atualiza o estado do job para failed, incrementa o contador de tentativas
-// e retorna o estado atualizado para que o chamador decida entre retry e DLQ.
+// SetJobFailed updates the job state to failed, increments the retry counter,
+// and returns the updated state so the caller can decide between retry and DLQ.
 func SetJobFailed(videoID string, jobErr error) (*JobState, error) {
 	existing, _ := GetJobState(videoID)
 	if existing == nil {
@@ -122,34 +122,34 @@ func SetJobFailed(videoID string, jobErr error) (*JobState, error) {
 	return existing, nil
 }
 
-// RequeueJob recoloca o job na fila principal para reprocessamento.
-// AcknowledgeMessage ainda deve ser chamado para remover da fila de processamento.
+// RequeueJob puts the job back in the main queue for reprocessing.
+// AcknowledgeMessage must still be called to remove it from the processing queue.
 func RequeueJob(videoID string) error {
 	existing, _ := GetJobState(videoID)
 	if existing != nil {
 		existing.Status = JobStatusPending
 		if err := setJobState(videoID, *existing); err != nil {
-			return fmt.Errorf("erro ao atualizar estado para requeue: %w", err)
+			return fmt.Errorf("failed to update state for requeue: %w", err)
 		}
 	}
 	return client.LPush(context.Background(), cfg.ProcessingRequestQueue, videoID).Err()
 }
 
-// MoveToDLQ move o job para a dead letter queue após esgotar as tentativas.
-// AcknowledgeMessage ainda deve ser chamado para remover da fila de processamento.
+// MoveToDLQ moves the job to the dead letter queue after exhausting retries.
+// AcknowledgeMessage must still be called to remove it from the processing queue.
 func MoveToDLQ(videoID string) error {
 	return client.LPush(context.Background(), deadLetterQueueName(), videoID).Err()
 }
 
-// GetJobState retorna o estado atual de um job. Retorna nil se o job não existir.
+// GetJobState returns the current state of a job. Returns nil if the job does not exist.
 func GetJobState(videoID string) (*JobState, error) {
 	data, err := client.Get(context.Background(), jobKey(videoID)).Bytes()
 	if err != nil {
-		return nil, fmt.Errorf("job não encontrado: %w", err)
+		return nil, fmt.Errorf("job not found: %w", err)
 	}
 	var state JobState
 	if err := json.Unmarshal(data, &state); err != nil {
-		return nil, fmt.Errorf("erro ao deserializar estado do job: %w", err)
+		return nil, fmt.Errorf("failed to deserialize job state: %w", err)
 	}
 	return &state, nil
 }

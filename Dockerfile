@@ -1,22 +1,22 @@
-# Dockerfile para o worker de processamento de vídeo
+# Dockerfile for the video processing worker
 FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 COPY . .
 
-# Baixar dependências
+# Download dependencies
 RUN go mod download
 
-# Compilar o binário
+# Build the binary
 RUN go build -o video-processor main.go
 
-# Imagem final
+# Final image
 FROM alpine:latest
 WORKDIR /app
 COPY --from=builder /app/video-processor .
 
-# Instalar ffmpeg
+# Install ffmpeg
 RUN apk add --no-cache ffmpeg
 
-# Comando padrão
+# Default command
 CMD ["./video-processor"]

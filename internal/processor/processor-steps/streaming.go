@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-// hlsVariant define uma variante de qualidade para o streaming adaptativo.
+// hlsVariant defines a quality variant for adaptive streaming.
 type hlsVariant struct {
 	Name         string
 	Height       int
@@ -19,8 +19,8 @@ type hlsVariant struct {
 	Bandwidth    int // bits/s para o EXT-X-STREAM-INF
 }
 
-// hlsVariants lista as resoluções suportadas em ordem crescente.
-// Só são geradas as variantes com Height <= altura do vídeo original.
+// hlsVariants lists the supported resolutions in ascending order.
+// Only variants with Height <= original video height are generated.
 var hlsVariants = []hlsVariant{
 	{"240p", 240, "400k", "64k", 464000},
 	{"360p", 360, "800k", "96k", 896000},
@@ -29,16 +29,16 @@ var hlsVariants = []hlsVariant{
 	{"1080p", 1080, "5000k", "192k", 5192000},
 }
 
-// SegmentForStreaming gera segmentos HLS adaptativos para múltiplas resoluções.
-// A estrutura de saída em outputDir é:
+// SegmentForStreaming generates adaptive HLS segments for multiple resolutions.
+// The output structure in outputDir is:
 //
 //	master.m3u8          — playlist mestre referenciando as variantes
-//	{resolução}/
-//	  playlist.m3u8      — playlist de cada variante
-//	  seg_000.ts, ...    — segmentos de vídeo
+//	{resolution}/
+//	  playlist.m3u8      — per-variant playlist
+//	  seg_000.ts, ...    — video segments
 func SegmentForStreaming(ctx context.Context, inputPath, outputDir string) error {
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		return fmt.Errorf("falha ao criar diretório: %w", err)
+		return fmt.Errorf("failed to create directory: %w", err)
 	}
 
 	sourceHeight := probeSourceHeight(ctx, inputPath)
@@ -56,7 +56,7 @@ func SegmentForStreaming(ctx context.Context, inputPath, outputDir string) error
 	for _, v := range selected {
 		varDir := filepath.Join(outputDir, v.Name)
 		if err := os.MkdirAll(varDir, 0755); err != nil {
-			return fmt.Errorf("falha ao criar diretório %s: %w", v.Name, err)
+			return fmt.Errorf("failed to create directory %s: %w", v.Name, err)
 		}
 		if err := transcodeHLSVariant(ctx, inputPath, varDir, v); err != nil {
 			return err
@@ -88,7 +88,7 @@ func transcodeHLSVariant(ctx context.Context, inputPath, varDir string, v hlsVar
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("falha na segmentação %s: %w, output: %s", v.Name, err, string(output))
+		return fmt.Errorf("segmentation failed %s: %w, output: %s", v.Name, err, string(output))
 	}
 	return nil
 }

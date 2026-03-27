@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// ValidateVideo valida o formato, integridade e codecs do vídeo usando ffprobe.
+// ValidateVideo validates the format, integrity, and codecs of the video using ffprobe.
 func ValidateVideo(ctx context.Context, inputPath string) error {
 	cmd := exec.CommandContext(ctx, "ffprobe",
 		"-v", "error",
@@ -18,12 +18,12 @@ func ValidateVideo(ctx context.Context, inputPath string) error {
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("vídeo inválido ou corrompido: %w, output: %s", err, string(output))
+		return fmt.Errorf("invalid or corrupted video: %w, output: %s", err, string(output))
 	}
 
 	duration := strings.TrimSpace(string(output))
 	if duration == "" || duration == "N/A" {
-		return fmt.Errorf("vídeo não possui duração válida")
+		return fmt.Errorf("video has no valid duration")
 	}
 
 	return nil

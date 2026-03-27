@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// Payload é o corpo enviado ao callback da API quando um job termina.
+// Payload is the body sent to the API callback when a job finishes.
 type Payload struct {
 	VideoID   string      `json:"video_id"`
 	Status    string      `json:"status"`
@@ -24,13 +24,13 @@ var httpClient = &http.Client{Timeout: 10 * time.Second}
 
 var sleepFn = time.Sleep
 
-// Notify envia o payload ao callbackURL com até 3 tentativas e backoff exponencial.
-// Se secret não for vazio, assina o body com HMAC-SHA256 no header X-Webhook-Signature.
-// Retorna erro apenas se todas as tentativas falharem.
+// Notify sends the payload to callbackURL with up to 3 attempts and exponential backoff.
+// If secret is non-empty, signs the body with HMAC-SHA256 in the X-Webhook-Signature header.
+// Returns an error only if all attempts fail.
 func Notify(callbackURL, secret string, payload Payload) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("erro ao serializar payload do webhook: %w", err)
+		return fmt.Errorf("failed to serialize webhook payload: %w", err)
 	}
 
 	var lastErr error
@@ -44,13 +44,13 @@ func Notify(callbackURL, secret string, payload Payload) error {
 		}
 		return nil
 	}
-	return fmt.Errorf("webhook falhou após 3 tentativas: %w", lastErr)
+	return fmt.Errorf("webhook failed after 3 attempts: %w", lastErr)
 }
 
 func send(url, secret string, body []byte) error {
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("erro ao criar requisição: %w", err)
+		return fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -62,12 +62,12 @@ func send(url, secret string, body []byte) error {
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("erro ao enviar webhook: %w", err)
+		return fmt.Errorf("failed to send webhook: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("webhook retornou status inesperado: %d", resp.StatusCode)
+		return fmt.Errorf("webhook returned unexpected status: %d", resp.StatusCode)
 	}
 	return nil
 }

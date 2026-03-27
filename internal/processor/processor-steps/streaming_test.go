@@ -13,17 +13,17 @@ func TestSegmentForStreaming_ValidVideo(t *testing.T) {
 	outputDir := filepath.Join(t.TempDir(), "hls")
 
 	if err := SegmentForStreaming(context.Background(), inputPath, outputDir); err != nil {
-		t.Fatalf("SegmentForStreaming() falhou: %v", err)
+		t.Fatalf("SegmentForStreaming() failed: %v", err)
 	}
 
 	masterPath := filepath.Join(outputDir, "master.m3u8")
 	if _, err := os.Stat(masterPath); os.IsNotExist(err) {
-		t.Fatal("SegmentForStreaming() não criou master.m3u8")
+		t.Fatal("SegmentForStreaming() did not create master.m3u8")
 	}
 
 	entries, err := os.ReadDir(outputDir)
 	if err != nil {
-		t.Fatalf("erro ao ler diretório de saída: %v", err)
+		t.Fatalf("error reading output directory: %v", err)
 	}
 
 	variantFound := false
@@ -34,7 +34,7 @@ func TestSegmentForStreaming_ValidVideo(t *testing.T) {
 		varDir := filepath.Join(outputDir, e.Name())
 		playlistPath := filepath.Join(varDir, "playlist.m3u8")
 		if _, err := os.Stat(playlistPath); os.IsNotExist(err) {
-			t.Errorf("variante %s não tem playlist.m3u8", e.Name())
+			t.Errorf("variant %s has no playlist.m3u8", e.Name())
 			continue
 		}
 		segs, _ := os.ReadDir(varDir)
@@ -45,13 +45,13 @@ func TestSegmentForStreaming_ValidVideo(t *testing.T) {
 			}
 		}
 		if tsCount == 0 {
-			t.Errorf("variante %s não tem segmentos .ts", e.Name())
+			t.Errorf("variant %s has no .ts segments", e.Name())
 			continue
 		}
 		variantFound = true
 	}
 	if !variantFound {
-		t.Error("SegmentForStreaming() não gerou nenhuma variante de resolução")
+		t.Error("SegmentForStreaming() did not generate any resolution variant")
 	}
 }
 
@@ -60,14 +60,14 @@ func TestSegmentForStreaming_InvalidVideo(t *testing.T) {
 	outputDir := filepath.Join(t.TempDir(), "hls")
 
 	if err := SegmentForStreaming(context.Background(), invalidPath, outputDir); err == nil {
-		t.Error("SegmentForStreaming() deveria falhar com entrada inválida")
+		t.Error("SegmentForStreaming() should fail with invalid input")
 	}
 }
 
 func TestSegmentForStreaming_NonExistentVideo(t *testing.T) {
 	outputDir := filepath.Join(t.TempDir(), "hls")
 
-	if err := SegmentForStreaming(context.Background(), "/caminho/que/nao/existe.mp4", outputDir); err == nil {
-		t.Error("SegmentForStreaming() deveria falhar com arquivo inexistente")
+	if err := SegmentForStreaming(context.Background(), "/path/that/does/not/exist.mp4", outputDir); err == nil {
+		t.Error("SegmentForStreaming() should fail with non-existent file")
 	}
 }

@@ -23,7 +23,7 @@ const (
 	VideoTypeRawArchived VideoType = "raw-archived"
 )
 
-// rawArchivedLifecycleDays é o número de dias que os raws arquivados ficam retidos antes de serem deletados.
+// rawArchivedLifecycleDays is the number of days archived raws are retained before being deleted.
 const rawArchivedLifecycleDays = 30
 
 var (
@@ -43,29 +43,29 @@ func InitMinioClient(config *config.Config) {
 	})
 
 	if err != nil {
-		log.Fatal().Err(err).Msg("Erro ao inicializar cliente MinIO")
+		log.Fatal().Err(err).Msg("Failed to initialize MinIO client")
 	}
 
 	exists, err := client.BucketExists(context.Background(), cfg.MinioBucketName)
 	if err != nil {
-		log.Fatal().Err(err).Str("bucket", cfg.MinioBucketName).Msg("Erro ao verificar se bucket existe")
+		log.Fatal().Err(err).Str("bucket", cfg.MinioBucketName).Msg("Failed to check if bucket exists")
 	}
 
-	log.Info().Str("bucket", cfg.MinioBucketName).Bool("exists", exists).Msg("Status do bucket MinIO")
+	log.Info().Str("bucket", cfg.MinioBucketName).Bool("exists", exists).Msg("MinIO bucket status")
 
 	if !exists {
 		err = client.MakeBucket(context.Background(), cfg.MinioBucketName, minio.MakeBucketOptions{})
 		if err != nil {
-			log.Fatal().Err(err).Str("bucket", cfg.MinioBucketName).Msg("Erro ao criar bucket")
+			log.Fatal().Err(err).Str("bucket", cfg.MinioBucketName).Msg("Failed to create bucket")
 		}
-		log.Info().Str("bucket", cfg.MinioBucketName).Msg("Bucket criado com sucesso")
+		log.Info().Str("bucket", cfg.MinioBucketName).Msg("Bucket created successfully")
 	}
 
 	configureRawArchivedLifecycle()
 }
 
-// configureRawArchivedLifecycle configura a lifecycle rule que deleta automaticamente
-// objetos em raw-archived/ após rawArchivedLifecycleDays dias.
+// configureRawArchivedLifecycle configures the lifecycle rule that automatically deletes
+// objects in raw-archived/ after rawArchivedLifecycleDays days.
 func configureRawArchivedLifecycle() {
 	ctx := context.Background()
 	prefix := string(VideoTypeRawArchived) + "/"
@@ -83,9 +83,9 @@ func configureRawArchivedLifecycle() {
 		},
 	}
 	if err := client.SetBucketLifecycle(ctx, cfg.MinioBucketName, lcConfig); err != nil {
-		log.Warn().Err(err).Msg("Falha ao configurar lifecycle rule para raw-archived")
+		log.Warn().Err(err).Msg("Failed to configure lifecycle rule for raw-archived")
 	} else {
-		log.Info().Int("days", rawArchivedLifecycleDays).Str("prefix", prefix).Msg("Lifecycle rule configurada para raw-archived")
+		log.Info().Int("days", rawArchivedLifecycleDays).Str("prefix", prefix).Msg("Lifecycle rule configured for raw-archived")
 	}
 }
 
@@ -106,33 +106,33 @@ func downloadVideo(videoType VideoType, objectID, destPath string) error {
 
 	info, err := client.StatObject(ctx, cfg.MinioBucketName, objectPath, minio.StatObjectOptions{})
 	if err != nil {
-		log.Error().Err(err).Str("object", objectPath).Msg("Objeto não encontrado")
+		log.Error().Err(err).Str("object", objectPath).Msg("Object not found")
 		return err
 	}
 	if maxBytes := cfg.MaxFileSizeMB * 1024 * 1024; info.Size > maxBytes {
-		return fmt.Errorf("vídeo muito grande: %.0fMB (máximo: %dMB)", float64(info.Size)/1024/1024, cfg.MaxFileSizeMB)
+		return fmt.Errorf("video too large: %.0fMB (maximum: %dMB)", float64(info.Size)/1024/1024, cfg.MaxFileSizeMB)
 	}
 
 	object, err := client.GetObject(ctx, cfg.MinioBucketName, objectPath, minio.GetObjectOptions{})
 	if err != nil {
-		log.Error().Err(err).Str("object", objectPath).Msg("Erro ao obter objeto")
+		log.Error().Err(err).Str("object", objectPath).Msg("Failed to get object")
 		return err
 	}
 	defer object.Close()
-	log.Info().Str("object", objectPath).Msg("Download iniciado")
+	log.Info().Str("object", objectPath).Msg("Download started")
 
 	outFile, err := os.Create(destPath)
 	if err != nil {
-		log.Error().Err(err).Str("destPath", destPath).Msg("Erro ao criar arquivo destino")
+		log.Error().Err(err).Str("destPath", destPath).Msg("Failed to create destination file")
 		return err
 	}
 	defer outFile.Close()
 
 	if _, err := outFile.ReadFrom(object); err != nil {
-		log.Error().Err(err).Str("object", objectPath).Msg("Erro ao ler objeto")
+		log.Error().Err(err).Str("object", objectPath).Msg("Failed to read object")
 		return err
 	}
-	log.Info().Str("object", objectPath).Str("destPath", destPath).Msg("Download concluído")
+	log.Info().Str("object", objectPath).Str("destPath", destPath).Msg("Download completed")
 
 	return nil
 }
@@ -148,25 +148,25 @@ func uploadVideo(srcPath string, videoType VideoType, objectID string) error {
 	ctx := context.Background()
 	file, err := os.Open(srcPath)
 	if err != nil {
-		return fmt.Errorf("[minio] erro ao abrir arquivo para upload: %w", err)
+		return fmt.Errorf("[minio] failed to open file for upload: %w", err)
 	}
 	defer file.Close()
 
 	fileInfo, err := file.Stat()
 	if err != nil {
-		return fmt.Errorf("[minio] erro ao obter info do arquivo: %w", err)
+		return fmt.Errorf("[minio] failed to get file info: %w", err)
 	}
 
 	objectPath := getObjectPath(videoType, objectID)
 	_, err = client.PutObject(ctx, cfg.MinioBucketName, objectPath, file, fileInfo.Size(), minio.PutObjectOptions{ContentType: "video/mp4"})
 	if err != nil {
-		return fmt.Errorf("erro ao fazer upload: %w", err)
+		return fmt.Errorf("failed to upload: %w", err)
 	}
-	log.Info().Str("object", objectPath).Str("bucket", cfg.MinioBucketName).Int64("size", fileInfo.Size()).Msg("Upload concluído")
+	log.Info().Str("object", objectPath).Str("bucket", cfg.MinioBucketName).Int64("size", fileInfo.Size()).Msg("Upload completed")
 	return nil
 }
 
-// UploadFile faz upload de qualquer arquivo para um caminho específico no MinIO.
+// UploadFile uploads any file to a specific path in MinIO.
 func UploadFile(srcPath, objectPath string) error {
 	_, err := circuitbreaker.MinIO.Execute(func() (interface{}, error) {
 		return nil, uploadFile(srcPath, objectPath)
@@ -178,30 +178,30 @@ func uploadFile(srcPath, objectPath string) error {
 	ctx := context.Background()
 	file, err := os.Open(srcPath)
 	if err != nil {
-		return fmt.Errorf("[minio] erro ao abrir arquivo para upload: %w", err)
+		return fmt.Errorf("[minio] failed to open file for upload: %w", err)
 	}
 	defer file.Close()
 
 	fileInfo, err := file.Stat()
 	if err != nil {
-		return fmt.Errorf("[minio] erro ao obter info do arquivo: %w", err)
+		return fmt.Errorf("[minio] failed to get file info: %w", err)
 	}
 
 	_, err = client.PutObject(ctx, cfg.MinioBucketName, objectPath, file, fileInfo.Size(),
 		minio.PutObjectOptions{ContentType: contentTypeByExt(filepath.Ext(srcPath))})
 	if err != nil {
-		return fmt.Errorf("erro ao fazer upload de %s: %w", objectPath, err)
+		return fmt.Errorf("failed to upload %s: %w", objectPath, err)
 	}
-	log.Info().Str("object", objectPath).Int64("size", fileInfo.Size()).Msg("Upload concluído")
+	log.Info().Str("object", objectPath).Int64("size", fileInfo.Size()).Msg("Upload completed")
 	return nil
 }
 
-// UploadDirectory faz upload recursivo de todos os arquivos de srcDir
-// para o MinIO com o prefixo objectPrefix, preservando a estrutura de subpastas.
+// UploadDirectory recursively uploads all files from srcDir to MinIO
+// with the given objectPrefix, preserving the subfolder structure.
 func UploadDirectory(srcDir, objectPrefix string) error {
 	entries, err := os.ReadDir(srcDir)
 	if err != nil {
-		return fmt.Errorf("[minio] erro ao ler diretório %s: %w", srcDir, err)
+		return fmt.Errorf("[minio] failed to read directory %s: %w", srcDir, err)
 	}
 	for _, entry := range entries {
 		srcPath := filepath.Join(srcDir, entry.Name())
@@ -236,8 +236,8 @@ func contentTypeByExt(ext string) string {
 	}
 }
 
-// ArchiveRawVideo move o raw de raw/videoID para raw-archived/videoID e deleta o original.
-// O objeto em raw-archived/ será deletado automaticamente após rawArchivedLifecycleDays dias.
+// ArchiveRawVideo moves the raw from raw/videoID to raw-archived/videoID and deletes the original.
+// The object in raw-archived/ will be automatically deleted after rawArchivedLifecycleDays days.
 func ArchiveRawVideo(videoID string) error {
 	_, err := circuitbreaker.MinIO.Execute(func() (interface{}, error) {
 		return nil, archiveRawVideo(videoID)
@@ -250,22 +250,22 @@ func archiveRawVideo(videoID string) error {
 	srcPath := getObjectPath(VideoTypeRaw, videoID)
 	dstPath := getObjectPath(VideoTypeRawArchived, videoID)
 
-	// CopyObject no MinIO é a forma de "mover" — não há operação nativa de rename
+	// CopyObject in MinIO is the way to "move" — there is no native rename operation
 	src := minio.CopySrcOptions{Bucket: cfg.MinioBucketName, Object: srcPath}
 	dst := minio.CopyDestOptions{Bucket: cfg.MinioBucketName, Object: dstPath}
 	if _, err := client.CopyObject(ctx, dst, src); err != nil {
-		return fmt.Errorf("erro ao copiar raw para arquivo: %w", err)
+		return fmt.Errorf("failed to copy raw to archive: %w", err)
 	}
 
 	if err := client.RemoveObject(ctx, cfg.MinioBucketName, srcPath, minio.RemoveObjectOptions{}); err != nil {
-		return fmt.Errorf("erro ao remover raw original após arquivamento: %w", err)
+		return fmt.Errorf("failed to remove original raw after archiving: %w", err)
 	}
 
-	log.Info().Str("src", srcPath).Str("dst", dstPath).Int("expire_days", rawArchivedLifecycleDays).Msg("Raw arquivado com sucesso")
+	log.Info().Str("src", srcPath).Str("dst", dstPath).Int("expire_days", rawArchivedLifecycleDays).Msg("Raw archived successfully")
 	return nil
 }
 
-// HealthCheck verifica se o cliente MinIO está saudável
+// HealthCheck checks whether the MinIO client is healthy.
 func HealthCheck() error {
 	ctx := context.Background()
 	_, err := client.BucketExists(ctx, cfg.MinioBucketName)

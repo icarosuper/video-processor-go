@@ -1,41 +1,41 @@
 # CLAUDE.md — VidroProcessor
 
-## O que é este projeto
+## What this project is
 
-Worker assíncrono em Go que uma API chama para processar vídeos enviados por usuários (modelo YouTube). Consome IDs de vídeos de uma fila Redis, baixa do MinIO, processa com FFmpeg em um pipeline de 7 etapas, e faz upload dos artefatos de volta ao MinIO.
+Async worker in Go that an API calls to process user-submitted videos (YouTube model). Consumes video IDs from a Redis queue, downloads from MinIO, processes with FFmpeg in a 7-step pipeline, and uploads the artifacts back to MinIO.
 
-## Estrutura essencial
+## Essential structure
 
 ```
 main.go                          # worker pool + graceful shutdown + HTTP server
 config/config.go                 # env vars via caarlos0/env
-queue/client.go                  # Redis BRPopLPush (consumo atômico) + recovery de órfãos
-queue/job.go                     # estado do job (pending→processing→done/failed), retry, DLQ
-internal/webhook/webhook.go      # notificação POST ao callbackURL com retry e HMAC opcional
-internal/circuitbreaker/circuitbreaker.go  # circuit breakers para MinIO e Redis
+queue/client.go                  # Redis BRPopLPush (atomic consumption) + orphan recovery
+queue/job.go                     # job state (pending→processing→done/failed), retry, DLQ
+internal/webhook/webhook.go      # POST notification to callbackURL with retry and optional HMAC
+internal/circuitbreaker/circuitbreaker.go  # circuit breakers for MinIO and Redis
 internal/telemetry/telemetry.go            # OpenTelemetry: init, tracer, shutdown
-minio/client.go                  # download/upload de vídeos e artefatos
-metrics/metrics.go               # métricas Prometheus (promauto)
-internal/processor/processor.go  # orquestrador das 7 etapas, retorna ProcessingResult
-internal/processor/processor-steps/*.go  # cada etapa do pipeline
+minio/client.go                  # download/upload of videos and artifacts
+metrics/metrics.go               # Prometheus metrics (promauto)
+internal/processor/processor.go  # orchestrator of the 7 steps, returns ProcessingResult
+internal/processor/processor-steps/*.go  # each pipeline step
 ```
 
-## Estado atual (~95% pronto para produção)
+## Current state (~95% production-ready)
 
-O pipeline FFmpeg funciona end-to-end com confiabilidade de jobs (retry, DLQ, recovery de órfãos), webhook de notificação, metadados persistidos, métricas operacionais reais, HLS adaptativo com múltiplas resoluções, circuit breakers para MinIO/Redis e timeouts individuais por etapa. Itens restantes: escalabilidade (auto-scaling, múltiplas instâncias, priorização de fila) e Dashboard Grafana.
+The FFmpeg pipeline works end-to-end with job reliability (retry, DLQ, orphan recovery), notification webhook, persisted metadata, real operational metrics, adaptive HLS with multiple resolutions, circuit breakers for MinIO/Redis, and individual timeouts per step. Remaining items: scalability (auto-scaling, multiple instances, queue prioritization) and Grafana Dashboard.
 
-Ver `docs/roadmap.md` para o plano completo.
+See `docs/roadmap.md` for the full plan.
 
-## Convenções do projeto
+## Project conventions
 
-- Logs em português (`"Iniciando video-processor"`, `"Etapa 1/7: Validando vídeo"`)
-- Erros wrappados com `fmt.Errorf("contexto: %w", err)`
-- Etapas não-críticas (thumbnails, áudio, preview, HLS) usam `log.Warn` e não retornam erro — o pipeline continua mesmo se falharem; os caminhos só são setados em `ProcessingResult` quando a etapa tem sucesso
-- Etapas críticas (validação, transcodificação) retornam erro e abortam o pipeline
-- Variáveis de ambiente obrigatórias com tag `notEmpty` via caarlos0/env
-- Testes de processamento pulam automaticamente se FFmpeg não estiver disponível (`GenerateTestVideo` em `test_helpers.go`)
+- Logs in English (`"Starting video-processor"`, `"Step 1/7: Validating video"`)
+- Errors wrapped with `fmt.Errorf("context: %w", err)`
+- Non-critical steps (thumbnails, audio, preview, HLS) use `log.Warn` and do not return error — the pipeline continues even if they fail; paths are only set in `ProcessingResult` when the step succeeds
+- Critical steps (validation, transcoding) return error and abort the pipeline
+- Required environment variables with `notEmpty` tag via caarlos0/env
+- Processing tests automatically skip if FFmpeg is not available (`GenerateTestVideo` in `test_helpers.go`)
 
-## Rodando localmente
+## Running locally
 
 ```bash
 cp .env-example .env
@@ -43,9 +43,9 @@ docker-compose up -d redis minio
 go run main.go
 ```
 
-## Rodando testes
+## Running tests
 
 ```bash
-go test ./...                                      # unitários
-go test -v ./test/integration/... -timeout 10m    # integração (requer Docker)
+go test ./...                                      # unit tests
+go test -v ./test/integration/... -timeout 10m    # integration (requires Docker)
 ```

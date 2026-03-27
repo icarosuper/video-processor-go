@@ -8,7 +8,7 @@
   "panels": [
     {
       "id": 1,
-      "title": "Workers Ativos",
+      "title": "Active Workers",
       "type": "stat",
       "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
       "fieldConfig": {
@@ -36,7 +36,7 @@
     },
     {
       "id": 2,
-      "title": "Tamanho da Fila",
+      "title": "Queue Size",
       "type": "stat",
       "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
       "fieldConfig": {
@@ -56,7 +56,7 @@
       "targets": [
         {
           "expr": "queue_size",
-          "legendFormat": "jobs na fila",
+          "legendFormat": "jobs in queue",
           "datasource": { "type": "prometheus" }
         }
       ],
@@ -64,7 +64,7 @@
     },
     {
       "id": 3,
-      "title": "Vídeos Processados (Total)",
+      "title": "Videos Processed (Total)",
       "type": "stat",
       "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
       "fieldConfig": {
@@ -81,7 +81,7 @@
     },
     {
       "id": 4,
-      "title": "Taxa de Sucesso",
+      "title": "Success Rate",
       "type": "gauge",
       "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
       "fieldConfig": {
@@ -103,7 +103,7 @@
       "targets": [
         {
           "expr": "100 * sum(videos_processed_total{status=\"success\"}) / sum(videos_processed_total)",
-          "legendFormat": "sucesso %",
+          "legendFormat": "success %",
           "datasource": { "type": "prometheus" }
         }
       ],
@@ -111,7 +111,7 @@
     },
     {
       "id": 5,
-      "title": "Throughput (vídeos/min)",
+      "title": "Throughput (videos/min)",
       "type": "timeseries",
       "gridPos": { "x": 16, "y": 0, "w": 8, "h": 4 },
       "fieldConfig": {
@@ -127,7 +127,7 @@
     },
     {
       "id": 6,
-      "title": "Duração por Etapa (p50 / p90 / p99)",
+      "title": "Duration per Step (p50 / p90 / p99)",
       "type": "timeseries",
       "gridPos": { "x": 0, "y": 4, "w": 16, "h": 8 },
       "fieldConfig": {
@@ -153,7 +153,7 @@
     },
     {
       "id": 7,
-      "title": "Duração Total do Job (p50 / p90 / p99)",
+      "title": "Total Job Duration (p50 / p90 / p99)",
       "type": "timeseries",
       "gridPos": { "x": 16, "y": 4, "w": 8, "h": 8 },
       "fieldConfig": {
@@ -179,7 +179,7 @@
     },
     {
       "id": 8,
-      "title": "Tamanho dos Vídeos Processados",
+      "title": "Processed Video Sizes",
       "type": "timeseries",
       "gridPos": { "x": 0, "y": 12, "w": 12, "h": 7 },
       "fieldConfig": {

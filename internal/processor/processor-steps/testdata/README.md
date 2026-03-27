@@ -1,17 +1,17 @@
 # Test Data
 
-Este diretório contém arquivos de teste para os testes unitários.
+This directory contains test files for unit tests.
 
-## Gerando vídeo de teste
+## Generating a test video
 
-Para gerar um vídeo de teste válido, use FFmpeg:
+To generate a valid test video, use FFmpeg:
 
 ```bash
-# Gerar vídeo de teste (5 segundos, 640x480, com áudio)
+# Generate test video (5 seconds, 640x480, with audio)
 ffmpeg -f lavfi -i testsrc=duration=5:size=640x480:rate=30 \
        -f lavfi -i sine=frequency=1000:duration=5 \
        -pix_fmt yuv420p \
        test_video.mp4
 ```
 
-Os testes criarão vídeos de teste automaticamente quando necessário.
+Tests will create test videos automatically when needed.

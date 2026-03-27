@@ -1,4 +1,4 @@
-# 🎥 Video Processor Go
+# 🎥 VidaroProcessor
 
 Sistema distribuído de processamento de vídeos construído em Go, utilizando arquitetura baseada em workers e filas de mensagens.
 
@@ -30,7 +30,7 @@ Sistema distribuído de processamento de vídeos construído em Go, utilizando a
 ```bash
 # Clone o repositório
 git clone <repository-url>
-cd video-processor-go
+cd VidaroProcessor
 
 # Copie o arquivo de ambiente
 cp .env-example .env
@@ -150,7 +150,7 @@ Ver [.env-example](./.env-example) para exemplo completo.
 ## 📦 Estrutura do Projeto
 
 ```
-video-processor-go/
+VidaroProcessor/
 ├── config/                 # Configurações
 ├── internal/
 │   └── processor/

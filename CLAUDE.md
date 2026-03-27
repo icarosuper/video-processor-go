@@ -1,4 +1,4 @@
-# CLAUDE.md — Video Processor Go
+# CLAUDE.md — VidaroProcessor
 
 ## O que é este projeto
 

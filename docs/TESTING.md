@@ -1,4 +1,4 @@
-# Testes - Video Processor Go
+# Testes - VidaroProcessor
 
 ## Cobertura Atual
 

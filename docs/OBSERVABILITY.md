@@ -1,4 +1,4 @@
-# Observabilidade - Video Processor Go
+# Observabilidade - VidaroProcessor
 
 ## Endpoints HTTP (`:8080`)
 

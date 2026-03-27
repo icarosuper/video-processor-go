@@ -1,4 +1,4 @@
-# CLAUDE.md — VidaroProcessor
+# CLAUDE.md — VidroProcessor
 
 ## O que é este projeto
 

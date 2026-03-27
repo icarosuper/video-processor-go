@@ -1,4 +1,4 @@
-# Observabilidade - VidaroProcessor
+# Observabilidade - VidroProcessor
 
 ## Endpoints HTTP (`:8080`)
 

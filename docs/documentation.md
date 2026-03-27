@@ -1,8 +1,8 @@
-# VidaroProcessor - Documentação do Projeto
+# VidroProcessor - Documentação do Projeto
 
 ## Visão Geral
 
-O **VidaroProcessor** é um sistema distribuído de processamento de vídeos construído em Go, utilizando uma arquitetura baseada em workers e filas de mensagens. O sistema processa vídeos de forma assíncrona e escalável através de um pipeline de 7 etapas com FFmpeg.
+O **VidroProcessor** é um sistema distribuído de processamento de vídeos construído em Go, utilizando uma arquitetura baseada em workers e filas de mensagens. O sistema processa vídeos de forma assíncrona e escalável através de um pipeline de 7 etapas com FFmpeg.
 
 ## Objetivo Principal
 
@@ -78,7 +78,7 @@ Receber vídeos brutos, processá-los através de um pipeline de transformaçõe
 ## Estrutura do Projeto
 
 ```
-VidaroProcessor/
+VidroProcessor/
 ├── config/
 │   └── config.go                    # Gerenciamento de configurações
 ├── internal/

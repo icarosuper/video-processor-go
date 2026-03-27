@@ -1,4 +1,4 @@
-# Roadmap - VidaroProcessor
+# Roadmap - VidroProcessor
 
 ## Objetivo do Projeto
 

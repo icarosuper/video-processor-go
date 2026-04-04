@@ -26,6 +26,14 @@ The FFmpeg pipeline works end-to-end with job reliability (retry, DLQ, orphan re
 
 See `docs/roadmap.md` for the full plan.
 
+## Branching and release strategy
+
+- **Feature branches** — one branch per feature group (e.g. `feature/dlq-retry`, `feature/hls`), branching off `master` and merged back via PR.
+- **`master`** — always deployable. CI/CD deploys `master` HEAD to staging automatically.
+- **Releases** — marked with a git tag (`v1.0.0`, `v1.1.0`, etc.) on `master`. Production deploys from tags.
+- **No staging branches** — no `staging/vX.Y.Z` branches. Rollback is done by redeploying a previous tag.
+- **Coordination with VidroApi** — when a change affects the shared contract (MinIO paths, Redis queue name, webhook format), both repos must be tagged and deployed together.
+
 ## Project conventions
 
 - Logs in English (`"Starting video-processor"`, `"Step 1/7: Validating video"`)

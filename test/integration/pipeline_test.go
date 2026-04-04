@@ -154,7 +154,7 @@ func TestPipeline_TranscodeStep(t *testing.T) {
 	obj.Close()
 
 	// Run transcode step
-	err = processor_steps.TranscodeVideo(ctx, inputPath, outputPath)
+	err = processor_steps.TranscodeVideo(ctx, inputPath, outputPath, processor_steps.VideoEncoderCPU, "")
 	if err != nil {
 		t.Fatalf("TranscodeVideo failed: %v", err)
 	}
@@ -265,7 +265,7 @@ func TestPipeline_FullWorkflow(t *testing.T) {
 		t.Logf("Analysis warning: %v", err) // Non-critical
 	}
 
-	if err := processor_steps.TranscodeVideo(ctx, inputPath, outputPath); err != nil {
+	if err := processor_steps.TranscodeVideo(ctx, inputPath, outputPath, processor_steps.VideoEncoderCPU, ""); err != nil {
 		t.Fatalf("Transcode failed: %v", err)
 	}
 

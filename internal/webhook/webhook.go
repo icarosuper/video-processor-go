@@ -12,12 +12,21 @@ import (
 )
 
 // Payload is the body sent to the API callback when a job finishes.
+// Field names use camelCase to match the VidroApi VideoProcessed contract
+// (deserialized with PropertyNameCaseInsensitive = true).
 type Payload struct {
-	VideoID   string      `json:"video_id"`
-	Status    string      `json:"status"`
-	Error     string      `json:"error,omitempty"`
-	Artifacts interface{} `json:"artifacts,omitempty"`
-	Metadata  interface{} `json:"metadata,omitempty"`
+	VideoID         string   `json:"videoId"`
+	Success         bool     `json:"success"`
+	ProcessedPath   string   `json:"processedPath,omitempty"`
+	PreviewPath     string   `json:"previewPath,omitempty"`
+	HlsPath         string   `json:"hlsPath,omitempty"`
+	AudioPath       string   `json:"audioPath,omitempty"`
+	ThumbnailPaths  []string `json:"thumbnailPaths,omitempty"`
+	FileSizeBytes   *int64   `json:"fileSizeBytes,omitempty"`
+	DurationSeconds *float64 `json:"durationSeconds,omitempty"`
+	Width           *int     `json:"width,omitempty"`
+	Height          *int     `json:"height,omitempty"`
+	Codec           string   `json:"codec,omitempty"`
 }
 
 var httpClient = &http.Client{Timeout: 10 * time.Second}

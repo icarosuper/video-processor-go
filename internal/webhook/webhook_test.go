@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -24,12 +25,15 @@ func TestNotify_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	payload := Payload{VideoID: "video-123", Status: "done"}
+	payload := Payload{VideoID: "video-123", Success: true}
 	if err := Notify(srv.URL, "", payload); err != nil {
 		t.Fatalf("Notify() should not return error: %v", err)
 	}
 	if received.VideoID != "video-123" {
 		t.Fatalf("expected VideoID 'video-123', got '%s'", received.VideoID)
+	}
+	if !received.Success {
+		t.Fatal("expected Success=true in received payload")
 	}
 }
 
@@ -41,7 +45,7 @@ func TestNotify_ContentTypeJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	Notify(srv.URL, "", Payload{VideoID: "v1", Status: "done"}) //nolint:errcheck
+	Notify(srv.URL, "", Payload{VideoID: "v1", Success: true}) //nolint:errcheck
 
 	if contentType != "application/json" {
 		t.Fatalf("expected Content-Type 'application/json', got '%s'", contentType)
@@ -55,13 +59,16 @@ func TestNotify_WithHMAC_CorrectSignature(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		signature = r.Header.Get("X-Webhook-Signature")
-		bodyReceived = make([]byte, r.ContentLength)
-		r.Body.Read(bodyReceived) //nolint:errcheck
+		var err error
+		bodyReceived, err = io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("failed to read request body: %v", err)
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
 
-	payload := Payload{VideoID: "video-123", Status: "done"}
+	payload := Payload{VideoID: "video-123", Success: true}
 	if err := Notify(srv.URL, secret, payload); err != nil {
 		t.Fatalf("Notify() should not return error: %v", err)
 	}
@@ -83,7 +90,7 @@ func TestNotify_NoSecret_NoHeader(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	Notify(srv.URL, "", Payload{VideoID: "v1", Status: "done"}) //nolint:errcheck
+	Notify(srv.URL, "", Payload{VideoID: "v1", Success: true}) //nolint:errcheck
 
 	if signature != "" {
 		t.Fatalf("should not send X-Webhook-Signature without secret, got: '%s'", signature)
@@ -102,7 +109,7 @@ func TestNotify_RetryOnFailure(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if err := Notify(srv.URL, "", Payload{VideoID: "v1", Status: "done"}); err != nil {
+	if err := Notify(srv.URL, "", Payload{VideoID: "v1", Success: true}); err != nil {
 		t.Fatalf("Notify() should succeed on the 3rd attempt, got: %v", err)
 	}
 	if attempts != 3 {
@@ -118,7 +125,7 @@ func TestNotify_ErrorAfter3Attempts(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := Notify(srv.URL, "", Payload{VideoID: "v1", Status: "done"})
+	err := Notify(srv.URL, "", Payload{VideoID: "v1", Success: true})
 	if err == nil {
 		t.Fatal("Notify() should return error after 3 failed attempts")
 	}
@@ -131,7 +138,7 @@ func TestNotify_ErrorAfter3Attempts(t *testing.T) {
 }
 
 func TestNotify_InvalidURL(t *testing.T) {
-	err := Notify("://invalid-url", "", Payload{VideoID: "v1", Status: "done"})
+	err := Notify("://invalid-url", "", Payload{VideoID: "v1", Success: true})
 	if err == nil {
 		t.Fatal("Notify() should return error with invalid URL")
 	}
@@ -139,7 +146,7 @@ func TestNotify_InvalidURL(t *testing.T) {
 
 func TestNotify_ServerUnavailable(t *testing.T) {
 	// Port with no listener
-	err := Notify("http://localhost:19999", "", Payload{VideoID: "v1", Status: "done"})
+	err := Notify("http://localhost:19999", "", Payload{VideoID: "v1", Success: true})
 	if err == nil {
 		t.Fatal("Notify() should return error when server is unavailable")
 	}
@@ -147,10 +154,9 @@ func TestNotify_ServerUnavailable(t *testing.T) {
 
 func TestPayload_JSONSerialization(t *testing.T) {
 	p := Payload{
-		VideoID:   "abc",
-		Status:    "done",
-		Error:     "",
-		Artifacts: map[string]string{"video": "processed/abc"},
+		VideoID:       "abc",
+		Success:       true,
+		ProcessedPath: "processed/abc",
 	}
 
 	data, err := json.Marshal(p)
@@ -158,11 +164,10 @@ func TestPayload_JSONSerialization(t *testing.T) {
 		t.Fatalf("failed to serialize payload: %v", err)
 	}
 
-	// Error field is omitempty — should not appear when empty
-	if strings.Contains(string(data), `"error"`) {
-		t.Fatalf("'error' field should not appear when empty, got: %s", data)
+	if !strings.Contains(string(data), `"videoId":"abc"`) {
+		t.Fatalf("'videoId' field should appear, got: %s", data)
 	}
-	if !strings.Contains(string(data), `"video_id":"abc"`) {
-		t.Fatalf("'video_id' field should appear, got: %s", data)
+	if !strings.Contains(string(data), `"success":true`) {
+		t.Fatalf("'success' field should appear, got: %s", data)
 	}
 }

@@ -21,6 +21,7 @@ import (
 
 	"video-processor/config"
 	"video-processor/internal/processor"
+	processor_steps "video-processor/internal/processor/processor-steps"
 	"video-processor/internal/telemetry"
 	"video-processor/internal/webhook"
 	"video-processor/metrics"
@@ -34,6 +35,10 @@ func main() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 
 	cfg := config.LoadConfig()
+
+	probeCtx, probeCancel := context.WithTimeout(context.Background(), 15*time.Second)
+	videoEncoder := processor_steps.ResolveVideoEncoder(probeCtx, cfg.VideoEncoder)
+	probeCancel()
 
 	// Initialize tracing (no-op if OTEL_ENDPOINT is not configured)
 	shutdownTracing, err := telemetry.Init(context.Background(), cfg.OTelServiceName, cfg.OTelEndpoint)
@@ -92,7 +97,7 @@ func main() {
 					log.Info().Int("workerID", workerID).Msg("Shutting down worker gracefully")
 					return
 				default:
-					if err := processNextMessage(ctx, workerID, cfg); err != nil {
+					if err := processNextMessage(ctx, workerID, cfg, videoEncoder); err != nil {
 						if err != context.Canceled {
 							log.Error().Err(err).Int("workerID", workerID).Msg("Error processing message")
 						}
@@ -164,7 +169,7 @@ func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("OK"))
 }
 
-func processNextMessage(ctx context.Context, workerID int, cfg *config.Config) error {
+func processNextMessage(ctx context.Context, workerID int, cfg *config.Config, videoEncoder string) error {
 	// Blocks until a message is received or ctx is canceled (shutdown).
 	// BRPOPLPUSH atomically moves the job to the processing queue.
 	msg, err := queue.ConsumeMessage(ctx)
@@ -249,7 +254,14 @@ func processNextMessage(ctx context.Context, workerID int, cfg *config.Config) e
 			metrics.VideoSizeBytes.Observe(float64(info.Size()))
 		}
 
-		result, err := processor.ProcessVideo(processCtx, inputPath, outputPath)
+		result, err := processor.ProcessVideo(processCtx, inputPath, outputPath, processor.Options{
+			ParallelNonCriticalSteps:      cfg.ParallelNonCriticalSteps,
+			MaxParallelPostTranscodeSteps: cfg.MaxParallelPostTranscodeSteps,
+			HLSSingleCommand:              cfg.HLSSingleCommand,
+			HLSSingleCommandFallback:      cfg.HLSSingleCommandFallback,
+			VideoEncoder:                  videoEncoder,
+			NVENCPreset:                   cfg.NVENCPreset,
+		})
 		if result != nil {
 			defer os.RemoveAll(result.TempDir)
 		}
@@ -372,13 +384,41 @@ func buildJobArtifacts(videoID, processedID string, result *processor.Processing
 // notifyWebhook sends the job completion notification to the callbackURL in the background.
 // Delivery errors are only logged — they do not affect the job result.
 func notifyWebhook(callbackURL, secret, videoID string, state *queue.JobState) {
+	success := state.Status == queue.JobStatusDone
+
 	payload := webhook.Payload{
-		VideoID:   videoID,
-		Status:    string(state.Status),
-		Error:     state.Error,
-		Artifacts: state.Artifacts,
-		Metadata:  state.Metadata,
+		VideoID: videoID,
+		Success: success,
 	}
+
+	if success && state.Artifacts != nil {
+		payload.ProcessedPath = state.Artifacts.Video
+		payload.PreviewPath = state.Artifacts.Preview
+		payload.HlsPath = state.Artifacts.HLS
+		payload.AudioPath = state.Artifacts.Audio
+
+		if state.Artifacts.Thumbnails != "" {
+			paths := make([]string, 5)
+			for i := 1; i <= 5; i++ {
+				paths[i-1] = fmt.Sprintf("%s/thumb_%03d.jpg", state.Artifacts.Thumbnails, i)
+			}
+			payload.ThumbnailPaths = paths
+		}
+	}
+
+	if success && state.Metadata != nil {
+		size := state.Metadata.Size
+		duration := state.Metadata.Duration
+		width := state.Metadata.Width
+		height := state.Metadata.Height
+
+		payload.FileSizeBytes = &size
+		payload.DurationSeconds = &duration
+		payload.Width = &width
+		payload.Height = &height
+		payload.Codec = state.Metadata.VideoCodec
+	}
+
 	if err := webhook.Notify(callbackURL, secret, payload); err != nil {
 		log.Warn().Err(err).Str("videoID", videoID).Str("callbackURL", callbackURL).Msg("Failed to send webhook")
 	} else {

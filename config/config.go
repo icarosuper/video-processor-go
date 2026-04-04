@@ -26,7 +26,7 @@ type Config struct {
 	HTTPPort string `env:"HTTP_PORT" envDefault:"8080"`
 
 	// Observability
-	OTelEndpoint    string `env:"OTEL_ENDPOINT"`                              // optional: OTLP endpoint (e.g. jaeger:4318); empty = no-op
+	OTelEndpoint    string `env:"OTEL_ENDPOINT"`                                  // optional: OTLP endpoint (e.g. jaeger:4318); empty = no-op
 	OTelServiceName string `env:"OTEL_SERVICE_NAME" envDefault:"video-processor"` // service name in traces
 
 	// Webhook
@@ -36,7 +36,15 @@ type Config struct {
 	WorkerCount int `env:"WORKER_COUNT" envDefault:"0"`
 
 	// Processing
-	MaxFileSizeMB int64 `env:"MAX_FILE_SIZE_MB" envDefault:"5120"` // 5 GB
+	MaxFileSizeMB                 int64 `env:"MAX_FILE_SIZE_MB" envDefault:"5120"` // 5 GB
+	ParallelNonCriticalSteps      bool  `env:"PARALLEL_NON_CRITICAL_STEPS" envDefault:"true"`
+	MaxParallelPostTranscodeSteps int   `env:"MAX_PARALLEL_POST_TRANSCODE_STEPS" envDefault:"4"`
+	HLSSingleCommand              bool  `env:"HLS_SINGLE_COMMAND" envDefault:"true"`
+	HLSSingleCommandFallback      bool  `env:"HLS_SINGLE_COMMAND_FALLBACK" envDefault:"true"`
+	// VideoEncoder: auto (probe NVENC), nvenc (GPU if available, else CPU), cpu (libx264 only).
+	VideoEncoder string `env:"VIDEO_ENCODER" envDefault:"auto"`
+	// NVENCPreset: FFmpeg NVENC preset p1–p7 (Turing+). p5 is a good default for 1080p quality.
+	NVENCPreset string `env:"NVENC_PRESET" envDefault:"p5"`
 }
 
 func LoadConfig() *Config {

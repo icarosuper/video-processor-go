@@ -57,6 +57,45 @@ The FFmpeg pipeline works. The basic infrastructure exists. But the pieces that 
 
 ---
 
+## 🟡 Performance — FFmpeg pipeline speed
+
+Processing a ~500 MB / 1080p video currently takes several minutes. Three changes would bring it down to ~2–3 min:
+
+### P-PERF1: HLS single-command encoding (highest impact)
+`SegmentForStreaming` in `streaming.go` runs one FFmpeg process per variant sequentially — up to 5 full encode passes for a 1080p video, each reading the entire input file from scratch.
+
+**Fix:** Replace the loop with a single FFmpeg invocation using `-filter_complex split` and multiple `-map` outputs. FFmpeg reads the input once and encodes all variants simultaneously.
+
+Expected gain: **~4–5× faster** on step 7.
+
+### P-PERF2: Transcode preset `medium` → `fast`
+`TranscodeVideo` in `transcode.go` uses `-preset medium`. For streaming/web delivery, `fast` or `faster` gives roughly 2× speed with negligible quality difference (CRF 23 stays the same).
+
+Expected gain: **~2× faster** on step 3.
+
+### P-PERF3: Parallelize non-critical steps 4–7
+Steps 4 (thumbnails), 5 (audio), 6 (preview), and 7 (streaming) in `processor.go` run sequentially but are fully independent — all read from the transcoded file. Running them with goroutines + `sync.WaitGroup` (or `errgroup`) would reduce total time to `max(step4, step5, step6, step7)` instead of their sum.
+
+Expected gain: **~2–3× faster** for the combined steps 4–7.
+
+### P-PERF4: Operational guard rails for the optimized pipeline
+To reduce rollout risk while enabling P-PERF1/2/3, include:
+
+- **Concurrency cap for steps 4–7**: configurable maximum parallel FFmpeg tasks per job to avoid CPU/RAM spikes under load.
+- **Explicit cancellation policy**: non-critical step failures do not fail the pipeline; parent context cancellation still interrupts all running steps.
+- **Per-step observability preserved**: keep `video_processing_step_duration_seconds{step=...}` and warning logs for each parallelized step.
+- **HLS fallback mode**: if single-command adaptive HLS fails for a specific input, optionally fallback to sequential per-variant encoding for resilience.
+- **Feature flags/env vars**: enable controlled rollout and fast rollback (`PARALLEL_NON_CRITICAL_STEPS`, `MAX_PARALLEL_POST_TRANSCODE_STEPS`, `HLS_SINGLE_COMMAND`, `HLS_SINGLE_COMMAND_FALLBACK`).
+
+### P-OPT1: Optional non-critical pipeline steps
+Steps 4–7 (thumbnails, audio extract, preview, HLS) are not required for every product surface. **VidroFront** today only uses **processed MP4** + **thumbnails** in the UI; HLS, preview clip, and separate audio are stored via webhook but not exposed on main watch/list flows.
+
+**Task:** Add configuration (env flags or similar) to **skip** any combination of non-critical steps when not needed, reducing FFmpeg time and MinIO writes. Critical path stays: validate → analyze → transcode → upload what was generated.
+
+**Coordination:** Align with **VidroApi** — webhook payload / `VideoArtifacts` must accept omitted paths where already nullable (`HlsPath`); ensure delete/cleanup and `VideoProcessed` handler tolerate missing optional artifacts.
+
+---
+
 ## 🔵 Long Term — Scalability and advanced features
 
 - **Auto-scaling**: increase workers based on queue size
@@ -65,4 +104,4 @@ The FFmpeg pipeline works. The basic infrastructure exists. But the pieces that 
 
 ---
 
-**Last Updated**: 2026-03-26
+**Last Updated**: 2026-03-31

@@ -11,7 +11,7 @@ func TestTranscodeVideo_ValidVideo(t *testing.T) {
 	inputPath := GenerateTestVideo(t, 5)
 	outputPath := filepath.Join(t.TempDir(), "output.mp4")
 
-	err := TranscodeVideo(context.Background(), inputPath, outputPath)
+	err := TranscodeVideo(context.Background(), inputPath, outputPath, VideoEncoderCPU, "")
 	if err != nil {
 		t.Fatalf("TranscodeVideo() failed: %v", err)
 	}
@@ -37,7 +37,7 @@ func TestTranscodeVideo_InvalidInput(t *testing.T) {
 	invalidPath := CreateInvalidFile(t)
 	outputPath := filepath.Join(t.TempDir(), "output.mp4")
 
-	err := TranscodeVideo(context.Background(), invalidPath, outputPath)
+	err := TranscodeVideo(context.Background(), invalidPath, outputPath, VideoEncoderCPU, "")
 	if err == nil {
 		t.Error("TranscodeVideo() should fail with invalid input")
 	}
@@ -46,7 +46,7 @@ func TestTranscodeVideo_InvalidInput(t *testing.T) {
 func TestTranscodeVideo_NonExistentInput(t *testing.T) {
 	outputPath := filepath.Join(t.TempDir(), "output.mp4")
 
-	err := TranscodeVideo(context.Background(), "/path/that/does/not/exist.mp4", outputPath)
+	err := TranscodeVideo(context.Background(), "/path/that/does/not/exist.mp4", outputPath, VideoEncoderCPU, "")
 	if err == nil {
 		t.Error("TranscodeVideo() should fail with non-existent file")
 	}

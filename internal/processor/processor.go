@@ -5,14 +5,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
+	"github.com/rs/zerolog/log"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	oteltrace "go.opentelemetry.io/otel/trace"
-	"github.com/rs/zerolog/log"
 
-	processor_steps "video-processor/internal/processor/processor-steps"
+	"video-processor/internal/processor/processor-steps"
 	"video-processor/internal/telemetry"
 	"video-processor/metrics"
 )
@@ -39,8 +40,31 @@ type ProcessingResult struct {
 	Metadata      *processor_steps.VideoMetadata
 }
 
+// Options controls performance behavior of the processing pipeline.
+type Options struct {
+	ParallelNonCriticalSteps      bool
+	MaxParallelPostTranscodeSteps int
+	HLSSingleCommand              bool
+	HLSSingleCommandFallback      bool
+	// VideoEncoder is processor_steps.VideoEncoderCPU or VideoEncoderNVENC (resolved before ProcessVideo).
+	VideoEncoder string
+	NVENCPreset  string
+}
+
+// DefaultOptions returns safe defaults for the processing pipeline.
+func DefaultOptions() Options {
+	return Options{
+		ParallelNonCriticalSteps:      true,
+		MaxParallelPostTranscodeSteps: 4,
+		HLSSingleCommand:              true,
+		HLSSingleCommandFallback:      true,
+		VideoEncoder:                  processor_steps.VideoEncoderCPU,
+		NVENCPreset:                   "p5",
+	}
+}
+
 // ProcessVideo executes all steps of the video processing pipeline.
-func ProcessVideo(ctx context.Context, inputPath, outputPath string) (*ProcessingResult, error) {
+func ProcessVideo(ctx context.Context, inputPath, outputPath string, opts Options) (*ProcessingResult, error) {
 	baseDir := filepath.Dir(outputPath)
 	videoBaseName := filepath.Base(inputPath)
 	videoBaseName = videoBaseName[:len(videoBaseName)-len(filepath.Ext(videoBaseName))]
@@ -75,14 +99,24 @@ func ProcessVideo(ctx context.Context, inputPath, outputPath string) (*Processin
 	// 3. Transcoding (critical step)
 	log.Info().Msg("Step 3/7: Transcoding video")
 	if err := runStep(ctx, "transcode", stepTimeoutTranscode, func(stepCtx context.Context) error {
-		return processor_steps.TranscodeVideo(stepCtx, inputPath, outputPath)
+		return processor_steps.TranscodeVideo(stepCtx, inputPath, outputPath, opts.VideoEncoder, opts.NVENCPreset)
 	}); err != nil {
 		return result, fmt.Errorf("transcoding failed: %w", err)
 	}
 
 	transcodedPath := outputPath
 
-	// 4. Thumbnail generation
+	if !opts.ParallelNonCriticalSteps {
+		runNonCriticalStepsSequential(ctx, inputPath, transcodedPath, tempDir, result, opts)
+	} else {
+		runNonCriticalStepsParallel(ctx, inputPath, transcodedPath, tempDir, result, opts)
+	}
+
+	log.Info().Msg("Processing pipeline completed successfully")
+	return result, nil
+}
+
+func runNonCriticalStepsSequential(ctx context.Context, inputPath, transcodedPath, tempDir string, result *ProcessingResult, opts Options) {
 	log.Info().Msg("Step 4/7: Generating thumbnails")
 	thumbnailsDir := filepath.Join(tempDir, "thumbnails")
 	if err := runStep(ctx, "thumbnails", stepTimeoutThumbnails, func(stepCtx context.Context) error {
@@ -93,7 +127,6 @@ func ProcessVideo(ctx context.Context, inputPath, outputPath string) (*Processin
 		result.ThumbnailsDir = thumbnailsDir
 	}
 
-	// 5. Audio extraction
 	log.Info().Msg("Step 5/7: Extracting audio")
 	audioPath := filepath.Join(tempDir, "audio.mp3")
 	if err := runStep(ctx, "audio", stepTimeoutAudio, func(stepCtx context.Context) error {
@@ -104,7 +137,6 @@ func ProcessVideo(ctx context.Context, inputPath, outputPath string) (*Processin
 		result.AudioPath = audioPath
 	}
 
-	// 6. Preview generation
 	log.Info().Msg("Step 6/7: Generating preview")
 	previewPath := filepath.Join(tempDir, "preview.mp4")
 	if err := runStep(ctx, "preview", stepTimeoutPreview, func(stepCtx context.Context) error {
@@ -115,19 +147,87 @@ func ProcessVideo(ctx context.Context, inputPath, outputPath string) (*Processin
 		result.PreviewPath = previewPath
 	}
 
-	// 7. Streaming segmentation
 	log.Info().Msg("Step 7/7: Segmenting for streaming")
 	streamingDir := filepath.Join(tempDir, "streaming")
 	if err := runStep(ctx, "streaming", stepTimeoutStreaming, func(stepCtx context.Context) error {
-		return processor_steps.SegmentForStreaming(stepCtx, inputPath, streamingDir)
+		return processor_steps.SegmentForStreamingWithOptions(stepCtx, inputPath, streamingDir, processor_steps.HLSOptions{
+			SingleCommand: opts.HLSSingleCommand,
+			Fallback:      opts.HLSSingleCommandFallback,
+			VideoEncoder:  opts.VideoEncoder,
+			NVENCPreset:   opts.NVENCPreset,
+		})
 	}); err != nil {
 		log.Warn().Err(err).Msg("Streaming segmentation failed")
 	} else {
 		result.StreamingDir = streamingDir
 	}
+}
 
-	log.Info().Msg("Processing pipeline completed successfully")
-	return result, nil
+func runNonCriticalStepsParallel(ctx context.Context, inputPath, transcodedPath, tempDir string, result *ProcessingResult, opts Options) {
+	maxParallel := opts.MaxParallelPostTranscodeSteps
+	if maxParallel < 1 {
+		maxParallel = 1
+	}
+	if maxParallel > 4 {
+		maxParallel = 4
+	}
+
+	sem := make(chan struct{}, maxParallel)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	run := func(name, startMsg, failMsg string, timeout time.Duration, fn func(context.Context) error, onSuccess func()) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			log.Info().Msg(startMsg)
+			if err := runStep(ctx, name, timeout, fn); err != nil {
+				log.Warn().Err(err).Msg(failMsg)
+				return
+			}
+			mu.Lock()
+			onSuccess()
+			mu.Unlock()
+		}()
+	}
+
+	thumbnailsDir := filepath.Join(tempDir, "thumbnails")
+	run("thumbnails", "Step 4/7: Generating thumbnails", "Failed to generate thumbnails", stepTimeoutThumbnails, func(stepCtx context.Context) error {
+		return processor_steps.GenerateThumbnails(stepCtx, transcodedPath, thumbnailsDir)
+	}, func() {
+		result.ThumbnailsDir = thumbnailsDir
+	})
+
+	audioPath := filepath.Join(tempDir, "audio.mp3")
+	run("audio", "Step 5/7: Extracting audio", "Audio extraction failed", stepTimeoutAudio, func(stepCtx context.Context) error {
+		return processor_steps.ExtractAudio(stepCtx, transcodedPath, audioPath)
+	}, func() {
+		result.AudioPath = audioPath
+	})
+
+	previewPath := filepath.Join(tempDir, "preview.mp4")
+	run("preview", "Step 6/7: Generating preview", "Preview generation failed", stepTimeoutPreview, func(stepCtx context.Context) error {
+		return processor_steps.GeneratePreview(stepCtx, transcodedPath, previewPath)
+	}, func() {
+		result.PreviewPath = previewPath
+	})
+
+	streamingDir := filepath.Join(tempDir, "streaming")
+	run("streaming", "Step 7/7: Segmenting for streaming", "Streaming segmentation failed", stepTimeoutStreaming, func(stepCtx context.Context) error {
+		return processor_steps.SegmentForStreamingWithOptions(stepCtx, inputPath, streamingDir, processor_steps.HLSOptions{
+			SingleCommand: opts.HLSSingleCommand,
+			Fallback:      opts.HLSSingleCommandFallback,
+			VideoEncoder:  opts.VideoEncoder,
+			NVENCPreset:   opts.NVENCPreset,
+		})
+	}, func() {
+		result.StreamingDir = streamingDir
+	})
+
+	wg.Wait()
 }
 
 // runStep executes a pipeline step within an OTel span and records duration via Prometheus.

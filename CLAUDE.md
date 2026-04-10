@@ -1,47 +1,15 @@
 # CLAUDE.md — VidroProcessor
 
-## What this project is
+Async Go worker consumed by VidroApi. Pulls video IDs from a Redis queue, downloads the source from MinIO, runs a 7-step FFmpeg pipeline, and uploads the artifacts back. Stateless — scale by running more instances against the same Redis.
 
-Async worker in Go that an API calls to process user-submitted videos (YouTube model). Consumes video IDs from a Redis queue, downloads from MinIO, processes with FFmpeg in a 7-step pipeline, and uploads the artifacts back to MinIO.
+## Always-on rules
 
-## Essential structure
-
-```
-main.go                          # worker pool + graceful shutdown + HTTP server
-config/config.go                 # env vars via caarlos0/env
-queue/client.go                  # Redis BRPopLPush (atomic consumption) + orphan recovery
-queue/job.go                     # job state (pending→processing→done/failed), retry, DLQ
-internal/webhook/webhook.go      # POST notification to callbackURL with retry and optional HMAC
-internal/circuitbreaker/circuitbreaker.go  # circuit breakers for MinIO and Redis
-internal/telemetry/telemetry.go            # OpenTelemetry: init, tracer, shutdown
-minio/client.go                  # download/upload of videos and artifacts
-metrics/metrics.go               # Prometheus metrics (promauto)
-internal/processor/processor.go  # orchestrator of the 7 steps, returns ProcessingResult
-internal/processor/processor-steps/*.go  # each pipeline step
-```
-
-## Current state (~95% production-ready)
-
-The FFmpeg pipeline works end-to-end with job reliability (retry, DLQ, orphan recovery), notification webhook, persisted metadata, real operational metrics, adaptive HLS with multiple resolutions, circuit breakers for MinIO/Redis, and individual timeouts per step. Remaining items: scalability (auto-scaling, multiple instances, queue prioritization) and Grafana Dashboard.
-
-See `docs/roadmap.md` for the full plan.
-
-## Branching and release strategy
-
-- **Feature branches** — one branch per feature group (e.g. `feature/dlq-retry`, `feature/hls`), branching off `master` and merged back via PR.
-- **`master`** — always deployable. CI/CD deploys `master` HEAD to staging automatically.
-- **Releases** — marked with a git tag (`v1.0.0`, `v1.1.0`, etc.) on `master`. Production deploys from tags.
-- **No staging branches** — no `staging/vX.Y.Z` branches. Rollback is done by redeploying a previous tag.
-- **Coordination with VidroApi** — when a change affects the shared contract (MinIO paths, Redis queue name, webhook format), both repos must be tagged and deployed together.
-
-## Project conventions
-
-- Logs in English (`"Starting video-processor"`, `"Step 1/7: Validating video"`)
-- Errors wrapped with `fmt.Errorf("context: %w", err)`
-- Non-critical steps (thumbnails, audio, preview, HLS) use `log.Warn` and do not return error — the pipeline continues even if they fail; paths are only set in `ProcessingResult` when the step succeeds
-- Critical steps (validation, transcoding) return error and abort the pipeline
-- Required environment variables with `notEmpty` tag via caarlos0/env
-- Processing tests automatically skip if FFmpeg is not available (`GenerateTestVideo` in `test_helpers.go`)
+- **Language**: all code, logs, errors, comments, commit messages, and docs are in English. No Portuguese in source.
+- **Error wrapping**: `fmt.Errorf("context: %w", err)` — never `%v`.
+- **Required config**: required env vars use `notEmpty` (caarlos0/env); optional vars use `envDefault`. Mirror every new var in `.env-example`.
+- **Shared contract with VidroApi**: queue names, MinIO paths, webhook payload. Any change here needs a coordinated tag + deploy in both repos.
+- **Branching**: `feature/<topic>` off `master`, merged via PR. `master` is always deployable; production deploys from `vX.Y.Z` tags.
+- **Only create files when necessary.** Don't add *.md or README docs unless explicitly asked.
 
 ## Running locally
 
@@ -54,6 +22,29 @@ go run main.go
 ## Running tests
 
 ```bash
-go test ./...                                      # unit tests
-go test -v ./test/integration/... -timeout 10m    # integration (requires Docker)
+go test ./...                                     # unit
+go test -v ./test/integration/... -timeout 10m    # integration (needs Docker)
 ```
+
+Tests that shell out to `ffmpeg`/`ffprobe` auto-skip when the binaries are missing — use `GenerateTestVideo` from `processor-steps/test_helpers.go`.
+
+## Docs pointers — read these when the task calls for it
+
+- **`docs/claude/features-index.md`** — read first when locating code. Maps every feature (worker lifecycle, queue, each pipeline step, MinIO operations, webhook, metrics) to its file, plus the canonical MinIO object layout and queue names. Update it whenever you add a module, a pipeline step, or a new external contract.
+
+- **`docs/claude/architecture.md`** — read before making structural changes, adding a pipeline step, or debugging end-to-end flow. Covers the worker lifecycle, queue protocol (main / `:processing` / `:dead` / finished), job state machine, the 7-step pipeline orchestration, and resilience layers (circuit breakers, orphan recovery, retries).
+
+- **`docs/claude/conventions.md`** — read before writing or modifying Go code. Rules for logging (zerolog, structured fields), error wrapping, critical vs non-critical step classification, config loading, metrics/tracing, circuit-breaker wrapping, and test layout.
+
+- **`docs/claude/design-decisions.md`** — read before proposing an architectural change or questioning *why* something is done a certain way. Explains `BRPOPLPUSH` over Streams, retry→DLQ policy, HLS single-command with fallback, NVENC auto-probe + CPU fallback, soft-archived raws with lifecycle rule, separate MinIO/Redis circuit breakers, and the webhook contract shape.
+
+- **`docs/roadmap.md`** — read when the user asks about project status, remaining work, or what to build next. The project is ~95% production-ready; remaining work centres on scalability and Grafana dashboards.
+
+- **`docs/GETTING_STARTED.md`**, **`docs/OBSERVABILITY.md`**, **`docs/TESTING.md`** — user-facing guides for setup, the observability stack, and running the full integration suite. Read when the user's question is about operating the worker, not about the code.
+
+## Keeping this index healthy
+
+- Adding a feature → update `features-index.md`.
+- Changing architecture or a cross-cutting flow → update `architecture.md` (and `design-decisions.md` if the *why* changes).
+- Changing a coding rule → update `conventions.md`.
+- This file should only change when the project structure itself changes.

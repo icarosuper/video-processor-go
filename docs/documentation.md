@@ -2,11 +2,11 @@
 
 ## Overview
 
-**VidroProcessor** is a distributed video processing system built in Go, using a worker-based architecture with message queues. The system processes videos asynchronously and scalably through a 7-step FFmpeg pipeline.
+**VidroProcessor** = distributed video proc system, Go, worker-based + message queues. Process videos async/scalable via 7-step FFmpeg pipeline.
 
 ## Main Goal
 
-Receive raw videos, process them through a transformation pipeline (validation, transcoding, thumbnails, audio, preview, and HLS), and store the results in MinIO. Communication is decoupled via Redis, enabling horizontal scalability.
+Recv raw videos → transform pipeline (validate, transcode, thumbnails, audio, preview, HLS) → store MinIO. Redis decouples comms, enables horiz scale.
 
 ## Architecture
 
@@ -32,9 +32,9 @@ Receive raw videos, process them through a transformation pipeline (validation, 
 ### Main Components
 
 #### 1. Concurrent Workers
-- Multiple workers processing videos in parallel
-- Configurable count via `WORKER_COUNT` (default: number of CPUs)
-- Graceful shutdown with 30-second timeout
+- Multi workers, parallel proc
+- Configurable via `WORKER_COUNT` (default: num CPUs)
+- Graceful shutdown, 30s timeout
 
 #### 2. Processing Pipeline
 
@@ -50,16 +50,16 @@ Receive raw videos, process them through a transformation pipeline (validation, 
 | 6. Preview | `preview.go` | No | `preview.mp4` |
 | 7. HLS Streaming | `streaming.go` | No | `streaming/*.ts` + `playlist.m3u8` |
 
-> **Note**: currently only the transcoded video (step 3) is sent to MinIO. Artifacts from steps 4–7 are generated in `tempDir` and discarded at the end. See [Known Issues](#known-issues).
+> **Note**: only transcoded video (step 3) sent to MinIO. Steps 4–7 artifacts gen in `tempDir`, discarded after. See [Known Issues](#known-issues).
 
 #### 3. Queue System (Redis)
 
-- **`PROCESSING_REQUEST_QUEUE`**: receives video IDs to process (BLPop)
-- **`PROCESSING_FINISHED_QUEUE`**: receives successfully processed video IDs (LPush)
+- **`PROCESSING_REQUEST_QUEUE`**: recv video IDs to proc (BLPop)
+- **`PROCESSING_FINISHED_QUEUE`**: recv success video IDs (LPush)
 
 #### 4. Storage (MinIO)
 
-- Prefix `raw/`: original videos
+- Prefix `raw/`: orig videos
 - Prefix `processed/`: transcoded videos
 
 ## Technology Stack
@@ -125,7 +125,7 @@ VidroProcessor/
 
 ### Note on `.env`
 
-`config.LoadConfig()` calls `godotenv.Load()` with `log.Fatal` if the `.env` file doesn't exist. In Docker/Kubernetes environments where variables are injected directly, this causes a startup failure. See [Known Issues](#known-issues).
+`config.LoadConfig()` calls `godotenv.Load()` with `log.Fatal` if `.env` missing. Docker/K8s envs w/ direct var injection → startup fail. See [Known Issues](#known-issues).
 
 ## How to Run
 
@@ -165,24 +165,24 @@ docker-compose up -d
 
 ## Known Issues
 
-The system is functional for the basic flow, but not yet production-ready. The main blockers are:
+System functional for basic flow, not prod-ready. Main blockers:
 
-- **No job state**: the API doesn't know if a video is processing, finished, or failed
-- **Destructive BLPop**: crash during processing = lost job
-- **Single resolution**: generates one MP4; adaptive streaming needs multiple qualities
-- **Silent failures**: failed jobs don't notify the API
+- **No job state**: API blind to proc/done/fail status
+- **Destructive BLPop**: crash during proc = lost job
+- **Single resolution**: one MP4 only; adaptive streaming needs multi quality
+- **Silent failures**: failed jobs no notify API
 
-See the full plan in [roadmap.md](./roadmap.md).
+Full plan: [roadmap.md](./roadmap.md).
 
 ## Operational Considerations
 
-- Video processing is CPU-intensive; calibrate `WORKER_COUNT` according to hardware
-- Temporary storage in `/tmp`; SSD recommended for performance
-- SSL/TLS in MinIO is hardcoded as `false`; should be configurable for production
-- Logs in ConsoleWriter format (not JSON) by default — switch to JSON in production
+- Proc is CPU-heavy; calibrate `WORKER_COUNT` per hardware
+- Temp storage in `/tmp`; SSD rec for perf
+- SSL/TLS in MinIO hardcoded `false`; must be configurable for prod
+- Logs in ConsoleWriter format (not JSON) by default — switch to JSON in prod
 
 ---
 
 **Version**: 0.1.0
-**Status**: Pipeline functional — production blockers documented in roadmap
+**Status**: Pipeline functional — prod blockers in roadmap
 **Last Updated**: 2026-03-26

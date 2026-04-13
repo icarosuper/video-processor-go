@@ -4,7 +4,7 @@
 
 ### `/health`
 
-Checks connectivity with Redis and MinIO.
+Check Redis+MinIO connectivity.
 
 ```bash
 curl http://localhost:8080/health
@@ -14,7 +14,7 @@ curl http://localhost:8080/health
 
 ### `/metrics`
 
-Exposes metrics in Prometheus format.
+Expose metrics in Prometheus format.
 
 ```bash
 curl http://localhost:8080/metrics
@@ -43,33 +43,33 @@ Total processing time per video (download → upload).
 
 ### `video_processing_step_duration_seconds` (Histogram)
 
-Time for each pipeline step.
+Time per pipeline step.
 
 **Labels**: `step` = `validate` | `analyze` | `transcode` | `thumbnails` | `audio` | `preview` | `streaming`
 
 **Buckets**: 0.1s, 0.5s, 1s, 2s, 5s, 10s, 30s, 60s, 120s, 300s
 
-Useful for identifying bottlenecks: which step is slowest.
+Use for bottleneck detection.
 
 ### `active_workers` (Gauge)
 
-Number of workers with a job in progress at the moment. Incremented when each job starts, decremented when it finishes.
+Workers with job in progress. Inc on start, dec on finish.
 
 ### `queue_size` (Gauge)
 
-Current size of the input queue. Updated every 30 seconds via `LLEN` on Redis.
+Input queue size. Updated every 30s via `LLEN` on Redis.
 
 ### `video_size_bytes` (Histogram)
 
-Size of videos downloaded from MinIO, recorded after the download.
+Video size from MinIO, recorded post-download.
 
-**Buckets**: exponential from 1MB to ~16GB
+**Buckets**: exponential 1MB to ~16GB
 
 ---
 
 ## Grafana Dashboard
 
-The project includes a pre-configured dashboard at `grafana/provisioning/dashboards/video-processor.json`, loaded automatically when `docker-compose` starts.
+Pre-configured dashboard at `grafana/provisioning/dashboards/video-processor.json`, auto-loaded on `docker-compose` start.
 
 **Available panels:**
 - Active workers and queue size (with color thresholds)
@@ -86,7 +86,7 @@ Access at `http://localhost:3000` (admin/admin) after `docker-compose up`.
 
 ## Prometheus Integration
 
-`prometheus.yml` is already configured at `prometheus/prometheus.yml` and mounted in the container via `docker-compose`. To run the worker outside Docker, add to your `prometheus.yml`:
+`prometheus.yml` pre-configured at `prometheus/prometheus.yml`, mounted via `docker-compose`. To run worker outside Docker, add to `prometheus.yml`:
 
 ```yaml
 scrape_configs:
@@ -149,7 +149,7 @@ for: 1m
 
 ## Structured Logs
 
-Logs use **Zerolog** in ConsoleWriter format (human-readable) by default. For production with centralized collection (Loki, ELK), replace in `main.go`:
+Use **Zerolog** ConsoleWriter (human-readable) by default. For prod with centralized collection (Loki, ELK), replace in `main.go`:
 
 ```go
 // Switch from ConsoleWriter to JSON output
@@ -158,9 +158,9 @@ log.Logger = zerolog.New(os.Stderr).With().Timestamp().Logger()
 
 **Context fields in logs**:
 - `workerID` — worker ID
-- `videoID` — ID of the video being processed
+- `videoID` — video being processed
 - `duration_seconds` — processing time
-- `object` — path of the object in MinIO
+- `object` — MinIO object path
 
 ---
 

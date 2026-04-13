@@ -1,6 +1,6 @@
 # Features index — VidroProcessor
 
-Map of features/modules to their files. Update this file whenever you add a new module, pipeline step, or external contract.
+Map features/modules → files. Update when add module, pipeline step, or external contract.
 
 ## Entry point and worker lifecycle
 
@@ -31,7 +31,7 @@ Queue names (all derived from `ProcessingRequestQueue`):
 
 ## Processing pipeline
 
-Orchestrator: `internal/processor/processor.go` (`ProcessVideo`). Seven steps with individual timeouts and OTel spans via `runStep`.
+Orchestrator: `internal/processor/processor.go` (`ProcessVideo`). 7 steps w/ individual timeouts + OTel spans via `runStep`.
 
 | Step | File | Critical? | Timeout | Purpose |
 |---|---|---|---|---|
@@ -41,13 +41,13 @@ Orchestrator: `internal/processor/processor.go` (`ProcessVideo`). Seven steps wi
 | 4. Thumbnails | `internal/processor/processor-steps/thumbnail.go` | no | 60s | |
 | 5. Audio extract | `internal/processor/processor-steps/audio.go` | no | 2m | MP3 |
 | 6. Preview | `internal/processor/processor-steps/preview.go` | no | 2m | Short MP4 clip |
-| 7. HLS segments | `internal/processor/processor-steps/streaming.go` | no | 4m | Adaptive HLS (240p–1080p), single-command with sequential fallback |
+| 7. HLS segments | `internal/processor/processor-steps/streaming.go` | no | 4m | Adaptive HLS (240p–1080p), single-command w/ sequential fallback |
 
 Support:
-- `internal/processor/processor-steps/video_encoder.go` — `ResolveVideoEncoder` (probes `ffmpeg -encoders` for `h264_nvenc`) and `NormalizeNVENCPreset` (p1–p7).
+- `internal/processor/processor-steps/video_encoder.go` — `ResolveVideoEncoder` (probes `ffmpeg -encoders` for `h264_nvenc`) + `NormalizeNVENCPreset` (p1–p7).
 - `internal/processor/processor-steps/test_helpers.go` — `GenerateTestVideo`; tests skip if `ffmpeg` missing.
 
-Steps 4–7 run in parallel by default (`runNonCriticalStepsParallel`, bounded by `MaxParallelPostTranscodeSteps`). Set `PARALLEL_NON_CRITICAL_STEPS=false` to run sequentially.
+Steps 4–7 run parallel by default (`runNonCriticalStepsParallel`, bounded by `MaxParallelPostTranscodeSteps`). Set `PARALLEL_NON_CRITICAL_STEPS=false` for sequential.
 
 ## Object storage (MinIO)
 
@@ -57,11 +57,11 @@ Steps 4–7 run in parallel by default (`runNonCriticalStepsParallel`, bounded b
 | Download raw | `minio/client.go` (`DownloadVideo`) | Enforces `MAX_FILE_SIZE_MB` |
 | Upload processed MP4 | `minio/client.go` (`UploadVideo`) | |
 | Upload arbitrary artifact | `minio/client.go` (`UploadFile`, `UploadDirectory`) | Thumbnails, audio, preview, HLS tree |
-| Archive raw (soft delete) | `minio/client.go` (`ArchiveRawVideo`) | Copies `raw/id` → `raw-archived/id` and removes original |
+| Archive raw (soft delete) | `minio/client.go` (`ArchiveRawVideo`) | Copies `raw/id` → `raw-archived/id`, removes original |
 | Lifecycle rule | `minio/client.go` (`configureRawArchivedLifecycle`) | Auto-deletes `raw-archived/` after 30 days |
 | Health check | `minio/client.go` (`HealthCheck`) | |
 
-Object layout inside the bucket:
+Object layout inside bucket:
 - `raw/<videoID>` — uploaded by API
 - `processed/<videoID>_processed` — MP4 output
 - `thumbnails/<videoID>/thumb_001.jpg..005.jpg`
@@ -76,8 +76,8 @@ Object layout inside the bucket:
 |---|---|---|
 | Payload contract | `internal/webhook/webhook.go` (`Payload`) | camelCase keys, matches VidroApi `VideoProcessed` |
 | Delivery with retry | `internal/webhook/webhook.go` (`Notify`) | 3 attempts, exponential backoff, 10s HTTP timeout |
-| HMAC signature | `internal/webhook/webhook.go` (`send`) | `X-Webhook-Signature: sha256=<hex>` when `WEBHOOK_SECRET` is set |
-| Caller wiring | `main.go` (`notifyWebhook`) | Fires on success and on permanent DLQ failure |
+| HMAC signature | `internal/webhook/webhook.go` (`send`) | `X-Webhook-Signature: sha256=<hex>` when `WEBHOOK_SECRET` set |
+| Caller wiring | `main.go` (`notifyWebhook`) | Fires on success + permanent DLQ failure |
 
 ## Resilience
 
@@ -91,13 +91,13 @@ Object layout inside the bucket:
 | Feature | File | Notes |
 |---|---|---|
 | Prometheus metrics | `metrics/metrics.go` | `videos_processed_total`, `video_processing_duration_seconds`, `video_processing_step_duration_seconds`, `active_workers`, `queue_size`, `video_size_bytes` |
-| OpenTelemetry tracing | `internal/telemetry/telemetry.go` | No-op when `OTEL_ENDPOINT` empty; spans `process_job` and `step/<name>` |
+| OpenTelemetry tracing | `internal/telemetry/telemetry.go` | No-op when `OTEL_ENDPOINT` empty; spans `process_job` + `step/<name>` |
 | Structured logs | `zerolog` everywhere | English messages only — see conventions |
-| Grafana provisioning | `grafana/provisioning/` | Dashboards, Loki and Prometheus datasources |
+| Grafana provisioning | `grafana/provisioning/` | Dashboards, Loki + Prometheus datasources |
 | Promtail config | `promtail/config.yml` | Ships container logs to Loki |
 
 ## Tests
 
-- Unit tests: co-located `*_test.go` for each package.
+- Unit tests: co-located `*_test.go` per package.
 - Integration tests: `test/integration/` — real Redis/MinIO via docker-compose. See `docs/TESTING.md`.
-- FFmpeg-dependent tests auto-skip when `ffmpeg` is absent (see `test_helpers.go`).
+- FFmpeg-dependent tests auto-skip when `ffmpeg` absent (see `test_helpers.go`).

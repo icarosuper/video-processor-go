@@ -1,81 +1,81 @@
 # Conventions — VidroProcessor
 
-Rules to follow when writing or modifying Go code in this project. If you're adding a new pipeline step, a new MinIO/Redis call, or a new configuration knob, read this first.
+Rules when write/modify Go code. New pipeline step, MinIO/Redis call, or config knob — read first.
 
 ## Language and formatting
 
-- **All logs, error messages, comments, commit messages, and identifiers are English.** The entire source and docs are English (`"Starting video-processor"`, `"Step 1/7: Validating video"`). Do not mix Portuguese in.
-- Standard `gofmt` / `go vet`. No custom linter rules.
-- Package names stay lower-case and short (`queue`, `minio`, `metrics`, `processor`).
+- **All logs, errors, comments, commits, identifiers: English.** No Portuguese mix.
+- Standard `gofmt` / `go vet`. No custom linter.
+- Package names: lower-case, short (`queue`, `minio`, `metrics`, `processor`).
 
 ## Logging
 
-- Use `zerolog` everywhere via `github.com/rs/zerolog/log`. Do not use the standard library `log` package in worker code (the only exception is `config/config.go` during startup).
-- Prefer structured fields over formatted strings:
+- Use `zerolog` via `github.com/rs/zerolog/log`. No stdlib `log` in worker code (exception: `config/config.go` startup).
+- Prefer structured fields:
 
   ```go
   log.Info().Str("videoID", videoID).Int("workerID", id).Msg("Processing video")
   ```
 
 - Log levels:
-  - `Info` — normal lifecycle events and step boundaries (`"Step 3/7: Transcoding video"`).
-  - `Warn` — recoverable problems (non-critical step failed, webhook delivery failed, circuit breaker tripped, orphan detected).
-  - `Error` — job-level failures or health check failures that should page an operator.
-  - `Fatal` — only during startup (`log.Fatal` kills the process). Never inside a job.
+  - `Info` — lifecycle events, step boundaries.
+  - `Warn` — recoverable problems (non-critical step fail, webhook fail, circuit breaker trip, orphan).
+  - `Error` — job-level or health check failures needing operator.
+  - `Fatal` — startup only. Never inside job.
 
 ## Error handling
 
-- Wrap errors with `fmt.Errorf("context: %w", err)` so `errors.Is` / `errors.As` works up the stack. Do not use `%v` for wrapping.
-- Include a short imperative prefix describing what failed (`"failed to download video: %w"`, `"failed to serialize job state: %w"`).
-- At the pipeline boundary, critical-step errors bubble up and abort the job; non-critical errors are logged and swallowed.
+- Wrap with `fmt.Errorf("context: %w", err)`. Not `%v`.
+- Short imperative prefix: `"failed to download video: %w"`, `"failed to serialize job state: %w"`.
+- Critical step errors bubble up, abort job. Non-critical: log, swallow.
 
 ## Critical vs non-critical pipeline steps
 
-This is the most important rule when touching `internal/processor`:
+Most important rule in `internal/processor`:
 
-- **Critical** (validate, transcode): return the error from the step function. `ProcessVideo` aborts the pipeline and the job is marked failed/retried.
-- **Non-critical** (analyze, thumbnails, audio, preview, streaming): log with `log.Warn` and return the error from the step function — but the orchestrator (`runNonCriticalStepsSequential` / `runNonCriticalStepsParallel`) swallows it. The corresponding `ProcessingResult` path is only set when the step succeeds, so downstream upload code can skip missing artifacts.
-- If you add a new step, decide up front which category it belongs to and wire it into the orchestrator accordingly. Never let a non-critical step fail the whole pipeline.
+- **Critical** (validate, transcode): return error → `ProcessVideo` aborts, job marked failed/retried.
+- **Non-critical** (analyze, thumbnails, audio, preview, streaming): log `Warn`, return error — orchestrator (`runNonCriticalStepsSequential` / `runNonCriticalStepsParallel`) swallows. `ProcessingResult` path set only on success; upload code skips missing artifacts.
+- New step: decide category upfront, wire into orchestrator. Never let non-critical step fail pipeline.
 
 ## Configuration
 
-- All runtime config lives in `config/config.go` as a single `Config` struct, loaded with `caarlos0/env/v10`.
-- **Required** variables get the `notEmpty` tag — `env.Parse` will refuse to start without them. Use this for anything the worker can't function without.
-- **Optional** variables use `envDefault:"..."`. Always provide a sensible default that works in dev.
+- All runtime config in `config/config.go` as `Config` struct, loaded via `caarlos0/env/v10`.
+- **Required** vars: `notEmpty` tag — `env.Parse` refuses start without them.
+- **Optional** vars: `envDefault:"..."`. Always sensible dev default.
 - Mirror every new env var in `.env-example`.
-- Never read environment variables with `os.Getenv` outside of `config/config.go`. Accept values through the `Config` struct.
+- No `os.Getenv` outside `config/config.go`. Use `Config` struct.
 
 ## Metrics
 
-- Declare new metrics in `metrics/metrics.go` with `promauto` so they register themselves.
-- Observe durations with histograms (`video_processing_step_duration_seconds` pattern), not gauges.
-- Use label cardinality carefully — `status` (success/error) and `step` (fixed set) are fine; never label by `videoID` or arbitrary user input.
+- Declare new metrics in `metrics/metrics.go` with `promauto`.
+- Durations: histograms (`video_processing_step_duration_seconds` pattern), not gauges.
+- Labels: `status` (success/error), `step` (fixed set) ok. Never label by `videoID` or arbitrary user input.
 
 ## Tracing
 
-- Wrap every pipeline step through `runStep`, which opens a `step/<name>` span and records errors. Do not call `telemetry.Tracer().Start` directly inside a step — add the step via `runStep` instead.
-- The root per-job span `process_job` is opened in `main.go`; child spans are created inside `processor.ProcessVideo` and `runStep`. Everything else is a descendant by virtue of `ctx` propagation, so pass `ctx` through.
+- All pipeline steps via `runStep` — opens `step/<name>` span, records errors. No direct `telemetry.Tracer().Start` inside step.
+- Root span `process_job` opened in `main.go`; children in `processor.ProcessVideo` and `runStep`. Pass `ctx` through.
 
 ## External calls
 
-- All MinIO and Redis calls go through the circuit breakers (`circuitbreaker.MinIO.Execute`, `circuitbreaker.Redis.Execute`). When adding a new MinIO/Redis function, wrap the inner call the same way the existing functions do.
-- Don't block on external calls without a context/timeout. `ConsumeMessage` is the exception (`BRPOPLPUSH` with blocking timeout 0); cancellation comes from the shutdown context.
+- All MinIO/Redis calls via circuit breakers (`circuitbreaker.MinIO.Execute`, `circuitbreaker.Redis.Execute`). New functions: wrap same as existing.
+- No blocking external calls without context/timeout. Exception: `ConsumeMessage` (`BRPOPLPUSH` blocking timeout 0) — cancellation via shutdown context.
 
 ## Tests
 
-- Unit tests live next to the code (`*_test.go` in the same package).
-- Integration tests live in `test/integration/` and require docker-compose (Redis + MinIO). They're slow; run with `-timeout 10m`.
-- Tests that shell out to `ffmpeg`/`ffprobe` **must** skip when the binaries are missing — use `GenerateTestVideo` from `test_helpers.go`, which handles the skip for you.
-- Do not mock MinIO or Redis in integration tests. The point of those tests is to validate the real contract.
+- Unit tests: `*_test.go` same package.
+- Integration tests: `test/integration/`, need docker-compose (Redis + MinIO). Slow; run `-timeout 10m`.
+- Tests using `ffmpeg`/`ffprobe`: must skip when binaries missing — use `GenerateTestVideo` from `test_helpers.go`.
+- No mocking MinIO/Redis in integration tests. Test real contract.
 
 ## File layout
 
-- New pipeline steps go in `internal/processor/processor-steps/<name>.go` with a matching `<name>_test.go`. Register them in `processor.go` (both sequential and parallel orchestrators).
-- New external-service clients get their own top-level package (`queue`, `minio`, ...), not a subfolder under `internal/`, to match the existing shape.
-- Shared internal helpers (webhook, circuitbreaker, telemetry) live under `internal/`.
+- New pipeline steps: `internal/processor/processor-steps/<name>.go` + `<name>_test.go`. Register in `processor.go` (both orchestrators).
+- New external-service clients: own top-level package (`queue`, `minio`, ...), not under `internal/`.
+- Shared internal helpers (webhook, circuitbreaker, telemetry): `internal/`.
 
 ## Commits and branches
 
 - Feature branches off `master` (`feature/<topic>`), merged via PR.
-- `master` is always deployable; tags (`vX.Y.Z`) trigger production deploys.
-- When a change touches the shared contract with VidroApi (queue names, MinIO paths, webhook payload), coordinate a joint tag + deploy with the API repo.
+- `master` always deployable; tags (`vX.Y.Z`) trigger prod deploys.
+- Changes touching shared contract with VidroApi (queue names, MinIO paths, webhook payload): coordinate joint tag + deploy with API repo.

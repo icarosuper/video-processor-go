@@ -11,7 +11,7 @@
 | `internal/telemetry` | ~100% | Unit |
 | `test/integration` | — | Integration |
 
-**Packages without tests**: `main`, `config`, `queue`, `minio`
+**No tests**: `main`, `config`, `queue`, `minio`
 
 ---
 
@@ -42,7 +42,7 @@ go test -v ./test/integration/... -timeout 10m
 
 ### Integration tests
 
-Require Docker. Automatically skipped if Docker is not available.
+Need Docker. Auto-skip if Docker absent.
 
 ```bash
 go test -v ./test/integration/... -timeout 10m
@@ -59,7 +59,7 @@ go test -v ./test/integration/... -timeout 10m
 - `TestValidateVideo_EmptyFile`
 
 ### `transcode_test.go`
-- `TestTranscodeVideo_ValidVideo` — checks output file was created and is non-empty
+- `TestTranscodeVideo_ValidVideo` — checks output created, non-empty
 - `TestTranscodeVideo_InvalidInput`
 - `TestTranscodeVideo_NonExistentInput`
 
@@ -112,7 +112,7 @@ go test -v ./test/integration/... -timeout 10m
 
 ## Integration Tests (`test/integration/`)
 
-Use **testcontainers-go** to spin up real Redis and MinIO instances.
+Use **testcontainers-go** — spins real Redis + MinIO.
 
 ### `minio_test.go`
 - `TestMinIO_BucketOperations`
@@ -133,8 +133,7 @@ Use **testcontainers-go** to spin up real Redis and MinIO instances.
 
 ### `GenerateTestVideo(t, duration int) string`
 
-Generates a test video via FFmpeg (640x480, H.264+AAC, 1000Hz sine wave).
-Automatically skips the test if FFmpeg is not available.
+Makes test video via FFmpeg (640x480, H.264+AAC, 1000Hz sine). Auto-skips if FFmpeg absent.
 
 ```go
 videoPath := GenerateTestVideo(t, 5) // 5 seconds
@@ -142,13 +141,13 @@ videoPath := GenerateTestVideo(t, 5) // 5 seconds
 
 ### `CreateInvalidFile(t) string`
 
-Creates a file with invalid content for error testing.
+Creates invalid-content file for error testing.
 
 ---
 
 ## Requirements
 
-**FFmpeg** is required for processing tests:
+**FFmpeg** required for processing tests:
 
 ```bash
 # Ubuntu/Debian
@@ -158,7 +157,7 @@ sudo apt-get install ffmpeg
 brew install ffmpeg
 ```
 
-Tests that depend on FFmpeg are automatically skipped with:
+FFmpeg-dependent tests auto-skip with:
 ```
 FFmpeg is not available - skipping test
 ```
@@ -167,12 +166,12 @@ FFmpeg is not available - skipping test
 
 ## What's Missing
 
-- `config.LoadConfig()` — including behavior without `.env`
+- `config.LoadConfig()` — incl. behavior without `.env`
 - `queue.ConsumeMessage()` and `PublishSuccessMessage()`
 - `minio.DownloadVideo()` and `UploadVideo()`
-- `main.processNextMessage()` — worker orchestration logic
-- Steps without tests: `audio.go`, `preview.go`, `streaming.go`
-- Transcoding and throughput benchmarks
+- `main.processNextMessage()` — worker orchestration
+- Untested steps: `audio.go`, `preview.go`, `streaming.go`
+- Transcoding + throughput benchmarks
 
 ---
 

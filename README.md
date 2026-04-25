@@ -258,11 +258,6 @@ This project is provided as-is, without warranties.
 - [Prometheus](https://prometheus.io/) - Metrics
 - [MinIO](https://min.io/) - Object storage
 
-## Related Projects
-
-- [VidroApi](../Api) — .NET backend that enqueues jobs and receives webhook on completion
-- [VidroFront](../FrontNovo) — React/TanStack Start frontend
-
 ---
 
 **Version**: 0.1.0

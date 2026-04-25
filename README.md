@@ -1,5 +1,9 @@
 # 🎥 VidroProcessor
 
+**Vidro** — [VidroApi](../Api) · [VidroFront](../FrontNovo)
+
+---
+
 Distributed video processing system built in Go, using a worker-based architecture with message queues.
 
 [![Go Version](https://img.shields.io/badge/Go-1.24-00ADD8?style=flat&logo=go)](https://golang.org/)
@@ -254,8 +258,13 @@ This project is provided as-is, without warranties.
 - [Prometheus](https://prometheus.io/) - Metrics
 - [MinIO](https://min.io/) - Object storage
 
+## Related Projects
+
+- [VidroApi](../Api) — .NET backend that enqueues jobs and receives webhook on completion
+- [VidroFront](../FrontNovo) — React/TanStack Start frontend
+
 ---
 
 **Version**: 0.1.0
 **Status**: 🚀 Functional
-**Last Updated**: 2026-01-27
+**Last Updated**: 2026-04-25

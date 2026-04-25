@@ -1,10 +1,8 @@
 # 🎥 VidroProcessor
 
-**Vidro** — [VidroApi](../Api) · [VidroFront](../FrontNovo)
-
----
-
-Distributed video processing system built in Go, using a worker-based architecture with message queues.
+Distributed video processing system for Vidro, built in Go.
+Pulls jobs enqueued by [VidroApi](https://github.com/icarosuper/VidroApi) and serves processed artifacts to [VidroFront](https://github.com/icarosuper/VidroFront).
+Uses a worker-based architecture with message queues.
 
 [![Go Version](https://img.shields.io/badge/Go-1.24-00ADD8?style=flat&logo=go)](https://golang.org/)
 [![Tests](https://img.shields.io/badge/tests-passing-brightgreen)](docs/TESTING.md)
